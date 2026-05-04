@@ -1,0 +1,76 @@
+/* Loader Component Styles */
+
+/* Inner ring reverse animation */
+.loader-inner-ring {
+  animation-direction: reverse;
+  animation-duration: 1s;
+}
+
+/* Staggered bounce animation for dots */
+.loader-dot-1 {
+  animation-delay: 0ms;
+}
+
+.loader-dot-2 {
+  animation-delay: 150ms;
+}
+
+.loader-dot-3 {
+  animation-delay: 300ms;
+}
+
+/* Sliding progress bar animation */
+.loader-slide {
+  animation: slide 2s ease-in-out infinite;
+}
+
+/* Custom keyframe animations */
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    transform: translateX(300%);
+  }
+
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Additional loader animations */
+@keyframes fadeInOut {
+
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .loader-container {
+    padding: 1rem;
+  }
+
+  .loader-progress {
+    width: 200px;
+  }
+}

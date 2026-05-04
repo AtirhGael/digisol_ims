@@ -1,0 +1,208 @@
+{
+  "dashboard": "T/F",
+  "human resource": [
+    {
+      "dashboard": "T/F"
+    },
+    {
+      "employee": [
+        {
+          "create": "T/F"
+        },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "onboarding": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "leave management": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "attendance": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "performance": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "queries": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "reports": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "tasks": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    }
+  ],
+  "finance": [
+    {
+      "dashboard": "T/F"
+    },
+    {
+      "transactions": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "budgeting": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "expenses": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "payroll": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "invoice & payments": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "reports": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    }
+  ],
+  "users": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "projects": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "documents": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "development": [
+    {
+      "dashboard": "T/F"
+    },
+    {
+      "tasks": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    }
+  ],
+  "facility": [
+    {
+      "construction": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "power": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    },
+    {
+      "inventory": [
+        { "create": "T/F" },
+        { "read": "T/F" },
+        { "update": "T/F" },
+        { "delete": "T/F" }
+      ]
+    }
+  ],
+  "settings": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "notifications": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "messages": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ],
+  "tasks": [
+    { "create": "T/F" },
+    { "read": "T/F" },
+    { "update": "T/F" },
+    { "delete": "T/F" }
+  ]
+}
