@@ -1,6 +1,6 @@
 import { Card } from '../../../components/other/Card'
 import { ContractCard } from '../../../components/other/ClientsContractCard'
-import { Button } from '../../../components/ui/Button'
+import { Button } from '../../../components/ui/button'
 import { FaStar, FaFileContract, FaDollarSign, FaClock, FaExclamationCircle, FaDownload, FaCalendarAlt, FaSync, FaArrowLeft } from 'react-icons/fa'
 
 interface ContractDetailViewProps {
