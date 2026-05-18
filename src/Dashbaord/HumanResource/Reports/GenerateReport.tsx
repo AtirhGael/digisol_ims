@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import type { ReportCategory } from "./data";
 
 const inputCls =
@@ -9,7 +10,6 @@ const labelCls = "block text-sm font-medium text-gray-700 mb-1";
 
 const categories: ReportCategory[] = [
   "Attendance",
-  "Payroll",
   "Leave",
   "Performance",
   "Headcount",
@@ -41,6 +41,22 @@ export const GenerateReport: React.FC<GenerateReportProps> = ({ onBack }) => {
   const [endDate, setEndDate] = useState("");
   const [format, setFormat] = useState<"PDF" | "Excel" | "CSV">("PDF");
   const [notes, setNotes] = useState("");
+
+  const handleGenerate = () => {
+    if (!category) {
+      toast.error("Please select a category.");
+      return;
+    }
+    if (!period) {
+      toast.error("Please enter a report period.");
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.error("Please select a start and end date.");
+      return;
+    }
+    toast.info("Report generation is not yet available. Please check back later.");
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -179,7 +195,7 @@ export const GenerateReport: React.FC<GenerateReportProps> = ({ onBack }) => {
               <Button variant="outline" onClick={onBack}>
                 Cancel
               </Button>
-              <Button>Generate Report</Button>
+              <Button onClick={handleGenerate}>Generate Report</Button>
             </div>
           </SectionCard>
         </div>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Eye, Pencil, Trash2 } from 'lucide-react';
+import { MoreVertical, Eye, Pencil, Trash2, UserX } from 'lucide-react';
 import { Button } from '../ui/button';
 
 // Type definitions
@@ -21,10 +21,12 @@ interface UserProps {
 function UserActionMenu({
   onView,
   onEdit,
+  onDeactivate,
   onDelete,
 }: {
   onView: () => void;
   onEdit: () => void;
+  onDeactivate: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -107,6 +109,17 @@ function UserActionMenu({
           </button>
           <button
             type="button"
+            className="w-full px-4 py-2 text-left text-sm text-amber-600 bg-transparent border-none cursor-pointer flex items-center gap-2.5 hover:bg-gray-50"
+            onClick={() => {
+              setOpen(false);
+              onDeactivate();
+            }}
+          >
+            <UserX className="text-base" />
+            <span>Deactivate</span>
+          </button>
+          <button
+            type="button"
             className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2.5 hover:bg-gray-50"
             onClick={() => {
               setOpen(false);
@@ -126,10 +139,12 @@ function UserActionMenu({
 export const createUsersColumns = ({
   onViewUser,
   onEditUser,
+  onDeactivateUser,
   onDeleteUser,
 }: {
   onViewUser: (id: string) => void;
   onEditUser: (id: string) => void;
+  onDeactivateUser: (id: string) => void;
   onDeleteUser: (id: string) => void;
 }) => [
   {
@@ -196,6 +211,7 @@ export const createUsersColumns = ({
       <UserActionMenu
         onView={() => onViewUser(row.id)}
         onEdit={() => onEditUser(row.id)}
+        onDeactivate={() => onDeactivateUser(row.id)}
         onDelete={() => onDeleteUser(row.id)}
       />
     ),

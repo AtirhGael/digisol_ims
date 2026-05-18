@@ -31,10 +31,7 @@ export interface MarkAttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   list: AttendanceProps[];
-  selectedStatuses: { [key: string]: string };
-  handleStatusChange: (id: string | number, value: string) => void;
-  inputValues: InputValues;
-  handleInputChange: (id: string | number, field: string, value: string) => void;
+  onSubmitSuccess?: () => void | Promise<void>;
 }
 
 export interface TodayAttendanceTabProps {

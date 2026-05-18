@@ -8,9 +8,17 @@ import {
   ClipboardCheck,
   Target,
   TrendingUp,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { CompletedEvaluation } from "../data";
+import {
+  downloadEvaluationReport,
+  type EvaluationDownloadFormat,
+} from "./downloadEvaluationReport";
+import { DownloadFormatDialog } from "./DownloadFormatDialog";
+import { updateEvaluationStatus, acknowledgeEvaluation } from "../../hrApi";
 
 function SectionCard({
   children,
@@ -87,12 +95,58 @@ function RatingStars({ rating, max = 5 }: { rating: number; max?: number }) {
 interface ViewEvaluationProps {
   evaluation: CompletedEvaluation;
   onBack: () => void;
+  onStartEvaluation?: () => void;
 }
 
 export const ViewEvaluation: React.FC<ViewEvaluationProps> = ({
   evaluation,
   onBack,
+  onStartEvaluation,
 }) => {
+  const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
+  const [updatingStatus, setUpdatingStatus] = React.useState(false);
+  const [acknowledging, setAcknowledging] = React.useState(false);
+
+  const handleUpdateStatus = async (status: "DRAFT" | "SUBMITTED" | "COMPLETED") => {
+    setUpdatingStatus(true);
+    try {
+      await updateEvaluationStatus(evaluation.id, status);
+      toast.success(`Evaluation marked as ${status.toLowerCase()}.`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed to update evaluation status.");
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    setAcknowledging(true);
+    try {
+      await acknowledgeEvaluation(evaluation.id);
+      toast.success("Evaluation acknowledged successfully.");
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed to acknowledge evaluation.");
+    } finally {
+      setAcknowledging(false);
+    }
+  };
+
+  const handleDownloadReport = (format: EvaluationDownloadFormat) => {
+    downloadEvaluationReport({
+      name: evaluation.name,
+      department: evaluation.department,
+      position: evaluation.position,
+      evaluator: evaluation.evaluator,
+      date: new Date(evaluation.date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      rating: evaluation.rating,
+      status: evaluation.status,
+    }, format);
+  };
+
   return (
     <div className="flex flex-col gap-5">
       {/* Back button */}
@@ -126,7 +180,37 @@ export const ViewEvaluation: React.FC<ViewEvaluationProps> = ({
               </p>
             </div>
           </div>
-          <Button variant="outline">Download Report</Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {onStartEvaluation && (
+              <Button onClick={onStartEvaluation} className="bg-primary text-white hover:bg-primary/90">
+                Start Evaluation
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              disabled={updatingStatus}
+              onClick={() => handleUpdateStatus("SUBMITTED")}
+            >
+              {updatingStatus ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
+              Submit
+            </Button>
+            <Button
+              variant="outline"
+              disabled={updatingStatus}
+              onClick={() => handleUpdateStatus("COMPLETED")}
+            >
+              Mark Complete
+            </Button>
+            <Button
+              variant="outline"
+              disabled={acknowledging}
+              onClick={handleAcknowledge}
+            >
+              {acknowledging ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
+              Acknowledge
+            </Button>
+            <Button variant="outline" onClick={() => setDownloadDialogOpen(true)}>Download Report</Button>
+          </div>
         </div>
       </SectionCard>
 
@@ -342,6 +426,14 @@ export const ViewEvaluation: React.FC<ViewEvaluationProps> = ({
           </SectionCard>
         </div>
       </div>
+      <DownloadFormatDialog
+        open={downloadDialogOpen}
+        onOpenChange={setDownloadDialogOpen}
+        onSelect={(format) => {
+          handleDownloadReport(format);
+          setDownloadDialogOpen(false);
+        }}
+      />
     </div>
   );
 };

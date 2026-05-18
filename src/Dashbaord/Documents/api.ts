@@ -1,12 +1,18 @@
 import axios from 'axios';
+import { useUserStore } from '../../Store/UserStore';
 
 const API_BASE_URL = import.meta.env.VITE_BASE_URL || 'http://localhost:4000';
 
 const getAuthHeaders = () => {
-  const accessToken = localStorage.getItem('accessToken');
-  return {
-    'Authorization': `Bearer ${accessToken}`,
-  };
+  const accessToken =
+    useUserStore.getState().accessToken ||
+    (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null);
+
+  return accessToken
+    ? {
+        Authorization: `Bearer ${accessToken}`,
+      }
+    : {};
 };
 
 export interface Document {

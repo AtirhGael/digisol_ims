@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import type { OnboardingRecord } from "./onboardingData";
-
-const progressColors = ["bg-emerald-500", "bg-blue-500", "bg-amber-400"];
+import { getProgressColorIndex, PROGRESS_COLORS } from "./onboardingUtils";
 
 function SectionCard({
   children,
@@ -41,12 +40,12 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
+      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50">
         <Icon size={16} className="text-gray-500" />
       </div>
       <div>
-        <p className="text-xs text-gray-400 uppercase tracking-wider">{label}</p>
-        <p className="text-sm font-medium text-gray-800 mt-0.5">{value}</p>
+        <p className="text-xs uppercase tracking-wider text-gray-400">{label}</p>
+        <p className="mt-0.5 text-sm font-medium text-gray-800">{value}</p>
       </div>
     </div>
   );
@@ -61,7 +60,7 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
         styles[status] ?? "bg-gray-100 text-gray-600"
       }`}
     >
@@ -78,7 +77,7 @@ function WorkflowBadge({ workflow }: { workflow: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
         styles[workflow] ?? "bg-gray-100 text-gray-700"
       }`}
     >
@@ -90,62 +89,81 @@ function WorkflowBadge({ workflow }: { workflow: string }) {
 interface ViewOnboardingProps {
   record: OnboardingRecord;
   onBack: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
 }
 
-export const ViewOnboarding: React.FC<ViewOnboardingProps> = ({
+export function ViewOnboarding({
   record,
   onBack,
   onEdit,
-}) => {
-  const colorIdx = parseInt(record.id, 10) % progressColors.length;
+}: ViewOnboardingProps) {
+  const colorIdx = getProgressColorIndex(record.id);
+  const statusLabel =
+    record.employmentStatus === "TERMINATED" || record.userStatus === "INACTIVE"
+      ? "Inactive"
+      : record.userStatus === "PENDING_ACTIVATION"
+        ? "Pending"
+        : record.progress >= 100
+          ? "Completed"
+          : "Active";
+  const addressValue =
+    [
+      record.addressStreet,
+      record.addressCity,
+      record.addressRegion,
+      record.addressCountry,
+      record.addressPostalCode,
+    ]
+      .filter(Boolean)
+      .join(", ") || "Not provided";
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Back button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary transition-colors w-fit"
+        className="flex w-fit items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-primary"
       >
         <ArrowLeft size={16} />
         Back to Onboarding
       </button>
 
-      {/* Header Card */}
       <SectionCard>
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
             <img
               src={record.avatar}
               alt={record.name}
-              className="w-16 h-16 rounded-full object-cover ring-2 ring-gray-100"
+              className="h-16 w-16 rounded-full object-cover ring-2 ring-gray-100"
             />
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-bold text-gray-900">{record.name}</h1>
-                <StatusBadge status="Active" />
+                <StatusBadge status={statusLabel} />
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">{record.role}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-gray-400 uppercase">
+              <p className="mt-0.5 text-sm text-gray-500">{record.role}</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-xs uppercase text-gray-400">
                   {record.onboardingType === "intern" ? "Intern" : "Employee"} Onboarding
                 </span>
-                <span className="text-gray-300">·</span>
-                <span className="text-xs text-gray-400">ID: ONB-{record.id.padStart(3, "0")}</span>
+                <span className="text-gray-300">|</span>
+                <span className="text-xs text-gray-400">
+                  ID: {record.employeeCode || record.id}
+                </span>
               </div>
             </div>
           </div>
-          <Button variant="outline" onClick={onEdit}>
-            Edit
-          </Button>
+          {onEdit ? (
+            <Button variant="outline" onClick={onEdit}>
+              Edit
+            </Button>
+          ) : null}
         </div>
       </SectionCard>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SectionCard>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
               <Calendar size={18} className="text-blue-600" />
             </div>
             <div>
@@ -163,7 +181,7 @@ export const ViewOnboarding: React.FC<ViewOnboardingProps> = ({
 
         <SectionCard>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
               <MapPin size={18} className="text-purple-600" />
             </div>
             <div>
@@ -179,47 +197,37 @@ export const ViewOnboarding: React.FC<ViewOnboardingProps> = ({
               <p className="text-xs text-gray-400">Progress</p>
               <span className="text-sm font-semibold text-gray-800">{record.progress}%</span>
             </div>
-            <div className="w-full h-2.5 rounded-full bg-gray-100">
+            <div className="h-2.5 w-full rounded-full bg-gray-100">
               <div
-                className={`h-2.5 rounded-full transition-all ${progressColors[colorIdx]}`}
+                className={`h-2.5 rounded-full transition-all ${PROGRESS_COLORS[colorIdx]}`}
                 style={{ width: `${record.progress}%` }}
               />
             </div>
-            <p className="text-xs text-gray-400">
-              {record.progress >= 75
-                ? "Almost complete"
-                : record.progress >= 50
-                ? "Halfway there"
-                : "In early stages"}
-            </p>
           </div>
         </SectionCard>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Content — 2/3 */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Personal Information */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
           <SectionCard>
-            <div className="flex items-center gap-2 mb-5">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <div className="mb-5 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
               <h2 className="text-base font-semibold text-gray-800">Personal Information</h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <InfoRow icon={User} label="Full Name" value={record.name} />
-              <InfoRow icon={Mail} label="Email" value={`${record.name.toLowerCase().replace(/\s/g, ".")}@company.com`} />
-              <InfoRow icon={Phone} label="Phone" value="+237 6XX XXX XXX" />
+              <InfoRow icon={Mail} label="Email" value={record.email || "Not provided"} />
+              <InfoRow icon={Phone} label="Phone" value={record.phone || "Not provided"} />
               <InfoRow icon={Briefcase} label="Role" value={record.role} />
             </div>
           </SectionCard>
 
-          {/* Onboarding Details */}
           <SectionCard>
-            <div className="flex items-center gap-2 mb-5">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <div className="mb-5 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
               <h2 className="text-base font-semibold text-gray-800">Onboarding Details</h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <InfoRow
                 icon={Briefcase}
                 label="Onboarding Type"
@@ -235,114 +243,74 @@ export const ViewOnboarding: React.FC<ViewOnboardingProps> = ({
                   day: "numeric",
                 })}
               />
-              <InfoRow icon={FileText} label="Department" value={record.role} />
-              {record.onboardingType === "intern" && (
+              <InfoRow
+                icon={FileText}
+                label="Department"
+                value={record.departmentName || "Not provided"}
+              />
+              {record.onboardingType === "intern" ? (
                 <>
-                  <InfoRow icon={GraduationCap} label="School" value="—" />
-                  <InfoRow icon={GraduationCap} label="Speciality" value="—" />
-                  <InfoRow icon={GraduationCap} label="Level" value="—" />
+                  <InfoRow icon={GraduationCap} label="School" value={record.school || "Not provided"} />
+                  <InfoRow
+                    icon={GraduationCap}
+                    label="Speciality"
+                    value={record.speciality || "Not provided"}
+                  />
+                  <InfoRow icon={GraduationCap} label="Level" value={record.level || "Not provided"} />
                 </>
-              )}
+              ) : null}
             </div>
           </SectionCard>
 
-          {/* Documentation */}
           <SectionCard>
-            <div className="flex items-center gap-2 mb-5">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-              <h2 className="text-base font-semibold text-gray-800">Progress & Documentation</h2>
+            <div className="mb-5 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+              <h2 className="text-base font-semibold text-gray-800">Documentation</h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <InfoRow icon={CreditCard} label="ID Card Number" value="—" />
-              <InfoRow icon={FileText} label="Documents" value="No documents uploaded" />
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <InfoRow icon={CreditCard} label="ID Card Number" value={record.nationalId || "Not provided"} />
+              <InfoRow icon={FileText} label="Address" value={addressValue} />
             </div>
           </SectionCard>
         </div>
 
-        {/* Right Sidebar — 1/3 */}
         <div className="space-y-6">
-          {/* Profile Card */}
           <SectionCard>
-            <div className="flex flex-col items-center text-center gap-3">
+            <div className="flex flex-col items-center gap-3 text-center">
               <img
                 src={record.avatar}
                 alt={record.name}
-                className="w-24 h-24 rounded-full object-cover ring-4 ring-gray-50"
+                className="h-24 w-24 rounded-full object-cover ring-4 ring-gray-50"
               />
               <div>
                 <p className="text-base font-semibold text-gray-900">{record.name}</p>
                 <p className="text-sm text-gray-500">{record.role}</p>
               </div>
-              <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium capitalize text-primary">
                 {record.onboardingType}
               </span>
             </div>
           </SectionCard>
 
-          {/* Status Card */}
           <SectionCard>
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
                 Status
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Onboarding Status</span>
-                  <StatusBadge status="Active" />
+                  <StatusBadge status={statusLabel} />
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Progress</span>
-                  <span className="font-medium text-gray-800">{record.progress}%</span>
+                  <span className="text-gray-600">Employment Status</span>
+                  <span className="font-medium text-gray-800">
+                    {record.employmentStatus || "Not provided"}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Workflow</span>
-                  <WorkflowBadge workflow={record.workflow} />
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* Timeline Card */}
-          <SectionCard>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                Timeline
-              </h3>
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                    <div className="w-0.5 flex-1 bg-gray-200" />
-                  </div>
-                  <div className="pb-4">
-                    <p className="text-sm font-medium text-gray-800">Onboarding Started</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(record.startDate).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                    <div className="w-0.5 flex-1 bg-gray-200" />
-                  </div>
-                  <div className="pb-4">
-                    <p className="text-sm font-medium text-gray-800">Documents Submitted</p>
-                    <p className="text-xs text-gray-400">Pending</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-400">Onboarding Complete</p>
-                    <p className="text-xs text-gray-400">Not yet</p>
-                  </div>
+                  <span className="text-gray-600">Account Status</span>
+                  <span className="font-medium text-gray-800">{record.userStatus || "Not provided"}</span>
                 </div>
               </div>
             </div>
@@ -351,4 +319,4 @@ export const ViewOnboarding: React.FC<ViewOnboardingProps> = ({
       </div>
     </div>
   );
-};
+}

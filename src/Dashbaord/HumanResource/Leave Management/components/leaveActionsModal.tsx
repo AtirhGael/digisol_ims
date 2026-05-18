@@ -1,8 +1,18 @@
 import React from "react";
 
+type LeaveRequestInfo = {
+  name: string;
+  role?: string;
+  department?: string;
+  reason?: string;
+};
+
 type Props = {
   open: boolean;
   mode: "approve" | "reject" | null;
+  isSubmitting?: boolean;
+  request?: LeaveRequestInfo | null;
+  deptOnLeaveCount?: number;
   onClose: () => void;
   onConfirm: (comment?: string) => void;
 };
@@ -10,6 +20,9 @@ type Props = {
 export const LeaveActionsModal: React.FC<Props> = ({
   open,
   mode,
+  isSubmitting = false,
+  request,
+  deptOnLeaveCount = 0,
   onClose,
   onConfirm,
 }) => {
@@ -22,6 +35,7 @@ export const LeaveActionsModal: React.FC<Props> = ({
   if (!open || !mode) return null;
 
   const isReject = mode === "reject";
+  const isBlocked = !isReject && deptOnLeaveCount >= 4;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -34,22 +48,34 @@ export const LeaveActionsModal: React.FC<Props> = ({
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gray-200 rounded-full" />
             <div>
-              <div className="font-medium">John Anderson</div>
-              <div className="text-xs text-gray-500">Engineering</div>
+              <div className="font-medium">{request?.name ?? "—"}</div>
+              <div className="text-xs text-gray-500">
+                {request?.role ?? ""}
+                {request?.department ? ` · ${request.department}` : ""}
+              </div>
             </div>
           </div>
-          <p className="mt-3 text-sm text-gray-700">
-            Reason: Family vacation during holiday season
-          </p>
+          {request?.reason && (
+            <p className="mt-3 text-sm text-gray-700">
+              <span className="font-medium">Reason:</span> {request.reason}
+            </p>
+          )}
         </div>
 
-        <div className="mb-4 p-4 rounded-lg bg-blue-50 text-sm text-blue-700">
-          Current Leave Balance — Annual: 18 days · Sick: 8 days · Personal: 4
-          days
-        </div>
-        <div className="mb-4 p-4 rounded-lg bg-yellow-50 text-sm text-yellow-700">
-          Team Impact — 2 other team members are on leave during this period
-        </div>
+        {isBlocked && (
+          <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 font-medium">
+            ⚠️ Cannot approve: {deptOnLeaveCount} employee{deptOnLeaveCount !== 1 ? "s" : ""} from{" "}
+            {request?.department ?? "this department"} are already on approved leave. It is not
+            possible to approve this request at this time.
+          </div>
+        )}
+
+        {!isBlocked && deptOnLeaveCount > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
+            ⚠️ {deptOnLeaveCount} other team member{deptOnLeaveCount !== 1 ? "s are" : " is"} on
+            leave during this period.
+          </div>
+        )}
 
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Comments/Feedback{" "}
@@ -69,15 +95,18 @@ export const LeaveActionsModal: React.FC<Props> = ({
         <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
+            disabled={isSubmitting}
             className="px-6 py-2 rounded-md border border-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={() => onConfirm(comment)}
-            className={`px-6 py-2 rounded-md text-white ${isReject ? "bg-red-600" : "bg-green-600"}`}
+            disabled={isSubmitting || isBlocked}
+            title={isBlocked ? "Cannot approve: too many team members on leave" : undefined}
+            className={`px-6 py-2 rounded-md text-white disabled:cursor-not-allowed disabled:opacity-60 ${isReject ? "bg-red-600" : "bg-green-600"}`}
           >
-            {isReject ? "Reject Request" : "Approve Request"}
+            {isSubmitting ? "Processing..." : isReject ? "Reject Request" : "Approve Request"}
           </button>
         </div>
       </div>

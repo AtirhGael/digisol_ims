@@ -5,22 +5,30 @@ import {
   Printer,
   Clock,
   CheckCircle,
-  AlertTriangle,
   BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Card } from "../../../components/other/Card";
+import SkeletonLoading from "../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
 import ReusableTable from "../../../components/other/ReusableTable/ReusableTable";
+import { useFetchHook } from "../../../Hooks/UseFetchHook";
 import { createReportColumns } from "./ReportColumns";
 import { ViewReport } from "./ViewReport";
 import { GenerateReport } from "./GenerateReport";
-import { hrReports } from "./data";
-import type { HRReport, ReportCategory } from "./data";
+import type { HrReport } from "../hrApi";
+import type { HRReport } from "./data";
+import { escapeHtml, openHrPrintPreview } from "../utils/print";
+
+type PaginatedResponse<T> = {
+  success: boolean;
+  message: string;
+  data: T[];
+};
 
 const categoryOptions: { key: string; value: string; label: string }[] = [
-  { key: "all", value: "", label: "All Categories" },
+ // { key: "all", value: "", label: "All Categories" },
   { key: "attendance", value: "Attendance", label: "Attendance" },
-  { key: "payroll", value: "Payroll", label: "Payroll" },
   { key: "leave", value: "Leave", label: "Leave" },
   { key: "performance", value: "Performance", label: "Performance" },
   { key: "headcount", value: "Headcount", label: "Headcount" },
@@ -29,15 +37,57 @@ const categoryOptions: { key: string; value: string; label: string }[] = [
 
 type PageView = "list" | "view" | "generate";
 
+const formatReportDate = (value: string) =>
+  value
+    ? new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+      })
+    : "";
+
 export const HumanResourceReports: React.FC = () => {
   const [view, setView] = useState<PageView>("list");
   const [selectedReport, setSelectedReport] = useState<HRReport | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const {
+    data: reportsResponse,
+    isLoading: loading,
+    error,
+  } = useFetchHook<PaginatedResponse<HrReport>>(
+    "/reports?page_size=100",
+    "hr-reports"
+  );
 
-  const totalReports = hrReports.length;
-  const generatedCount = hrReports.filter((r) => r.status === "Generated").length;
-  const pendingCount = hrReports.filter((r) => r.status === "Pending").length;
-  const totalDownloads = hrReports.reduce((sum, r) => sum + r.downloads, 0);
+  React.useEffect(() => {
+    if (error) {
+      toast.error(error.response?.data?.message || "Failed to load reports.");
+    }
+  }, [error]);
+
+  const reports = (reportsResponse?.data ?? []).map((report) => ({
+    id: report.report_id,
+    title: report.report_name,
+    category: (report.category as HRReport["category"]) || "Headcount",
+    status: (report.status as HRReport["status"]) || "Pending",
+    generatedBy: report.generated_by,
+    generatedDate: report.generated_date ?? "",
+    period: report.period
+      ? new Date(report.period).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "",
+    fileSize: report.file_size,
+    downloads: report.downloads,
+    outputFileUrl: report.output_file_url ?? null,
+  }));
+
+  const totalReports = reports.length;
+  const generatedCount = reports.filter((r) => r.status === "Generated").length;
+  const pendingCount = reports.filter((r) => r.status === "Pending").length;
+  const totalDownloads = reports.reduce((sum, r) => sum + r.downloads, 0);
 
   const handleView = (report: HRReport) => {
     setSelectedReport(report);
@@ -47,22 +97,122 @@ export const HumanResourceReports: React.FC = () => {
 
   const handleDownload = (report: HRReport) => {
     setOpenMenuId(null);
-    // Future: trigger real download
-  };
-
-  const handleDelete = (report: HRReport) => {
-    setOpenMenuId(null);
-    // Future: confirm & delete
+    if (report.outputFileUrl) {
+      const link = document.createElement("a");
+      link.href = report.outputFileUrl; 
+      link.download = report.title || "report";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } else {
+      toast.info("No file available for this report.");
+    }
   };
 
   const handleGenerate = () => {
     setView("generate");
   };
 
+  const handlePrintAll = () => {
+    const rows = reports
+      .map(
+        (report) => `
+          <tr>
+            <td>${escapeHtml(report.id)}</td>
+            <td>${escapeHtml(report.title)}</td>
+            <td>${escapeHtml(report.category)}</td>
+            <td>${escapeHtml(report.status)}</td>
+            <td>${escapeHtml(report.generatedBy)}</td>
+            <td>${escapeHtml(formatReportDate(report.generatedDate))}</td>
+            <td>${escapeHtml(report.period)}</td>
+            <td>${escapeHtml(report.fileSize)}</td>
+            <td>${escapeHtml(report.downloads)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const opened = openHrPrintPreview(
+      "HR Reports Summary",
+      `
+        <h1>HR Reports Summary</h1>
+        <p>Generated from the HR reports page</p>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Generated By</th>
+              <th>Date</th>
+              <th>Period</th>
+              <th>File Size</th>
+              <th>Downloads</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="9">No reports found.</td></tr>'}</tbody>
+        </table>
+      `
+    );
+
+    if (opened) {
+      toast.success("Print dialog opened successfully.");
+    } else {
+      toast.error("Unable to open print preview.");
+    }
+  };
+
+  const handleExportAll = () => {
+    const header = [
+      "Report ID",
+      "Title",
+      "Category",
+      "Status",
+      "Generated By",
+      "Generated Date",
+      "Period",
+      "File Size",
+      "Downloads",
+    ];
+
+    const csvRows = reports.map((report) =>
+      [
+        report.id,
+        report.title,
+        report.category,
+        report.status,
+        report.generatedBy,
+        formatReportDate(report.generatedDate),
+        report.period,
+        report.fileSize,
+        report.downloads,
+      ]
+        .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+        .join(",")
+    );
+
+    const csvContent = [header.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "hr-reports-export.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    toast.success("All reports exported successfully.");
+  };
+
   const handleBack = () => {
     setView("list");
     setSelectedReport(null);
   };
+
+  // The reports page swaps between the table, generator, and detail view in-place
+  // so users can return to the list without losing the surrounding page context.
+  if (loading) return <SkeletonLoading />;
 
   // Generate Report form
   if (view === "generate") {
@@ -79,7 +229,7 @@ export const HumanResourceReports: React.FC = () => {
     onToggleMenu: setOpenMenuId,
     onView: handleView,
     onDownload: handleDownload,
-    onDelete: handleDelete,
+    showDelete: false,
   });
 
   return (
@@ -94,11 +244,11 @@ export const HumanResourceReports: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handlePrintAll}>
               <Printer className="w-4 h-4" />
               Print
             </Button>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExportAll}>
               <Download className="w-4 h-4" />
               Export All
             </Button>
@@ -141,7 +291,7 @@ export const HumanResourceReports: React.FC = () => {
         <ReusableTable
           heading="All Reports"
           columns={columns}
-          data={hrReports}
+          data={reports}
           filterKey="category"
           filterOptions={categoryOptions}
           searchKeys={["title", "id", "generatedBy", "period", "category"]}

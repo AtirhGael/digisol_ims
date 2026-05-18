@@ -1,5 +1,7 @@
 import { Card } from '../../../components/other/Card'
 import { HeadingComponent } from '../../../components/other/HeadingComponent'
+import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   FaMoneyBillWave,
   FaArrowTrendUp,
@@ -11,7 +13,6 @@ import {
   FaReceipt
 } from 'react-icons/fa6'
 import { type DashboardResponse } from '../financeApi'
-import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading'
 import ChartSkeleton from '../../../components/other/Loader/ChartSkeleton'
 import Skeleton from '../../../components/other/Loader/Skeleton'
 import useFetchHook from '../../../Hooks/UseFetchHook'
@@ -29,7 +30,27 @@ const formatCurrency = (amount: number): string => {
   return amount.toLocaleString()
 }
 
+type DashboardData = DashboardResponse['data']
+
+const normalizeDashboardData = (
+  response?: DashboardResponse | DashboardData | null
+): DashboardData | null => {
+  if (!response) return null
+
+  if ('summary' in response) {
+    return response
+  }
+
+  if ('data' in response && response.data) {
+    return response.data
+  }
+
+  return null
+}
+
 export const FinanceDashboard = () => {
+  const navigate = useNavigate()
+
   // Fetch dashboard data using the shared hook to keep data-loading consistent.
   const {
     data: dashboardResponse,
@@ -37,17 +58,25 @@ export const FinanceDashboard = () => {
     isError,
     error,
     refetch
-  } = useFetchHook<DashboardResponse>('/finance/dashboard', 'finance-dashboard')
+  } = useFetchHook<DashboardResponse | DashboardData>(
+    '/finance/dashboard',
+    'finance-dashboard',
+    { staleTime: 60_000 }
+  )
 
   // Normalize response so the UI can safely render even on empty/failed data.
-  const hasApiError = !!dashboardResponse && !dashboardResponse.success
+  const hasApiError =
+    !!dashboardResponse &&
+    'success' in dashboardResponse &&
+    dashboardResponse.success === false
   const errorMessage = hasApiError
     ? dashboardResponse?.message || 'Failed to load dashboard'
     : (error as any)?.response?.data?.message || 'Failed to load dashboard'
 
-  const dashboardData = dashboardResponse?.success
-    ? dashboardResponse.data
-    : null
+  const dashboardData = useMemo(
+    () => normalizeDashboardData(dashboardResponse),
+    [dashboardResponse]
+  )
   const summary = dashboardData?.summary
   const cashFlowData = dashboardData?.cash_flow_data || []
   const expenseDistribution = dashboardData?.expense_distribution || []
@@ -65,9 +94,16 @@ export const FinanceDashboard = () => {
   )
 
   const distributionColors = ['#3BA4E0', '#10B981', '#F59E0B', '#8B5CF6', '#6B7280', '#EF4444']
+  const expenseDistributionTotal = expenseDistribution.reduce(
+    (total, item) => total + (Number(item.value) || 0),
+    0
+  )
   const pieChartData = expenseDistribution.map((item, index) => ({
     name: item.name,
-    value: item.value,
+    value: expenseDistributionTotal
+      ? Math.round(((Number(item.value) || 0) / expenseDistributionTotal) * 100)
+      : 0,
+    amount: `${formatCurrency(Number(item.value) || 0)} XAF`,
     fill: distributionColors[index % distributionColors.length],
   }))
 
@@ -162,24 +198,58 @@ export const FinanceDashboard = () => {
       <div className='mb-8'>
         <h3 className='text-lg font-semibold mb-4'>Quick Actions</h3>
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
-          <button className='bg-white p-4 rounded-lg  hover: transition- flex flex-col items-center gap-2'>
-            <FaMoneyCheckDollar className='text-[#37A5DC] text-2xl' />
-            <span className='text-sm font-regular'>Payroll Management</span>
-          </button>
-          <button className='bg-white p-4 rounded-lg hover: transition- flex flex-col items-center gap-2'>
-            <FaChartLine className='text-[#37A5DC] text-2xl' />
-            <span className='text-sm font-regular'>
-              Budgeting and Budget Tracking
-            </span>
-          </button>
-          <button className='bg-white p-4 rounded-lg hover: transition- flex flex-col items-center gap-2'>
-            <FaReceipt className='text-[#37A5DC] text-2xl' />
-            <span className='text-sm font-regular'>Expense Report</span>
-          </button>
-          <button className='bg-white p-4 rounded-lg  hover: transition- flex flex-col items-center gap-2'>
-            <FaFileInvoice className='text-[#37A5DC] text-2xl' />
-            <span className='text-sm font-regular'>Invoice</span>
-          </button>
+          {isPageLoading ? (
+            <>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="min-h-[96px] rounded-lg border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/payroll')}
+                className='bg-white p-4 rounded-lg hover:bg-gray-50 transition-colors flex flex-col items-center gap-2'
+              >
+                <FaMoneyCheckDollar className='text-[#37A5DC] text-2xl' />
+                <span className='text-sm font-regular'>Payroll Management</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/budgeting')}
+                className='bg-white p-4 rounded-lg hover:bg-gray-50 transition-colors flex flex-col items-center gap-2'
+              >
+                <FaChartLine className='text-[#37A5DC] text-2xl' />
+                <span className='text-sm font-regular'>
+                  Budgeting and Budget Tracking
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/expenses')}
+                className='bg-white p-4 rounded-lg hover:bg-gray-50 transition-colors flex flex-col items-center gap-2'
+              >
+                <FaReceipt className='text-[#37A5DC] text-2xl' />
+                <span className='text-sm font-regular'>Expense Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/invoice')}
+                className='bg-white p-4 rounded-lg hover:bg-gray-50 transition-colors flex flex-col items-center gap-2'
+              >
+                <FaFileInvoice className='text-[#37A5DC] text-2xl' />
+                <span className='text-sm font-regular'>Invoice</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -206,7 +276,7 @@ export const FinanceDashboard = () => {
               No expense distribution data yet.
             </div>
           ) : (
-            <ChartPieLabelCustom data={pieChartData} />
+            <ChartPieLabelCustom data={pieChartData} showAmount />
           )}
         </div>
       </div>

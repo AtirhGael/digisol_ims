@@ -6,6 +6,12 @@ import { Card } from '../../../components/other/Card';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
 import useFetchHook from '../../../Hooks/UseFetchHook';
 import { getBudgetUtilization, type Budget } from '../financeApi';
+import {
+  FaArrowTrendUp,
+  FaChartLine,
+  FaFileInvoice,
+  FaMoneyBillWave,
+} from 'react-icons/fa6';
 
 type UtilizationResponse = {
   budget_id: string;
@@ -24,6 +30,12 @@ const formatCurrency = (value: number, currency = 'XAF') =>
     currency,
     maximumFractionDigits: 0,
   }).format(value || 0);
+
+const formatCompact = (value: number) => {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+  return value.toLocaleString();
+};
 
 const statusStyles: Record<string, string> = {
   DRAFT: 'bg-yellow-100 text-yellow-700',
@@ -91,7 +103,13 @@ export const ViewBudget = () => {
       utilization?.utilization_percentage ??
       (allocated > 0 ? Math.round((spent / allocated) * 100) : 0);
 
-    return { allocated, spent, remaining, utilizationPct };
+    return {
+      allocated,
+      spent,
+      remaining,
+      utilizationPct,
+      variance: allocated - spent,
+    };
   }, [budget, utilization]);
 
   if (isPageLoading) {
@@ -139,6 +157,12 @@ export const ViewBudget = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            className="bg-[#3d4094] hover:bg-[#2d3074]"
+            onClick={() => navigate(`/dashboard/budgeting/add?editId=${budget.budget_id}`)}
+          >
+            Edit
+          </Button>
           <Button variant="outline" onClick={() => navigate('/dashboard/budgeting')}>
             Back
           </Button>
@@ -154,8 +178,9 @@ export const ViewBudget = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card
           heading="Total Allocated"
-          amount={formatCurrency(budgetTotals.allocated, budget.currency || 'XAF')}
-          currency="Budget"
+          amount={formatCompact(budgetTotals.allocated)}
+          currency={budget.currency || 'XAF'}
+          icons={<FaFileInvoice />}
           cardStyle={{ background: 'linear-gradient(135deg, #4f46a1 0%, #2f71b7 100%)' }}
           cardClassName="min-h-[120px]"
           headingClassName="text-white/90"
@@ -166,18 +191,21 @@ export const ViewBudget = () => {
         />
         <Card
           heading="Total Spent"
-          amount={formatCurrency(budgetTotals.spent, budget.currency || 'XAF')}
-          currency="Spent"
+          amount={formatCompact(budgetTotals.spent)}
+          currency={budget.currency || 'XAF'}
+          icons={<FaMoneyBillWave className="text-white text-xl" />}
         />
         <Card
-          heading="Remaining"
-          amount={formatCurrency(budgetTotals.remaining, budget.currency || 'XAF')}
-          currency="Available"
+          heading="Remaining Budget"
+          amount={formatCompact(budgetTotals.remaining)}
+          currency={budget.currency || 'XAF'}
+          icons={<FaChartLine className="text-white text-xl" />}
         />
         <Card
-          heading="Utilization"
-          amount={`${budgetTotals.utilizationPct}%`}
-          currency="Budget Used"
+          heading="Budget Variance"
+          amount={`${budgetTotals.variance >= 0 ? '' : '-'}${formatCompact(Math.abs(budgetTotals.variance))}`}
+          currency={budget.currency || 'XAF'}
+          icons={<FaArrowTrendUp className="text-white text-xl" />}
         />
       </div>
 

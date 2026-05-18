@@ -5,6 +5,7 @@ import type { Department, DepartmentFormData } from "../types";
 import { useFetchHook } from "../../../../Hooks/UseFetchHook";
 import { usePost } from "../../../../Hooks/UsePostHook";
 import { toast } from "sonner";
+import SkeletonLoading from "../../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
 
 interface User {
   user_id: string;
@@ -17,6 +18,7 @@ interface User {
 
 interface DepartmentFormProps {
   department?: Department;
+  initialValues?: Partial<DepartmentFormData>;
   onSave: (data: DepartmentFormData) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -24,6 +26,7 @@ interface DepartmentFormProps {
 
 export function DepartmentForm({
   department,
+  initialValues,
   onSave,
   onCancel,
   loading = false,
@@ -33,12 +36,13 @@ export function DepartmentForm({
     code: "",
     description: "",
     department_head_id: "",
-    parent_department_id: "",
+    parent_department_id: initialValues?.parent_department_id ?? "",
     contact_email: "",
     contact_phone: "",
     budget: "",
     location: "",
     status: "ACTIVE",
+    ...initialValues,
   });
 
   const [errors, setErrors] = useState<Partial<DepartmentFormData>>({});
@@ -116,26 +120,35 @@ export function DepartmentForm({
     try {
       if (isCreating) {
         // Creating a new department - use POST hook
-        const payload = {
+        const isSubDepartment = !!formData.parent_department_id;
+        const payload: Record<string, any> = {
           name: formData.name.trim(),
           code: formData.code.trim().toUpperCase(),
           description: formData.description.trim(),
-          department_head_id: formData.department_head_id || null,
-       
+          department_head_id: formData.department_head_id || undefined,
+          parent_department_id: formData.parent_department_id || undefined,
+          contact_email: formData.contact_email?.trim() || undefined,
+          contact_phone: formData.contact_phone?.trim() || undefined,
+          location: formData.location?.trim() || undefined,
+          budget_allocation: formData.budget ? Number(formData.budget) : undefined,
+          status: formData.status,
         };
 
-         console.log("this is the data to be sent to the backend: ", payload);
-        const response = await postData("/departments", payload);
+        const endpoint = isSubDepartment ? '/departments/sub' : '/departments';
+        console.log(`Creating ${isSubDepartment ? 'sub-department' : 'department'} at ${endpoint}:`, payload);
+        await postData(endpoint, payload);
         
         toast.success(
-          `Department "${formData.name}" has been created successfully!`,
+          `${isSubDepartment ? 'Sub-department' : 'Department'} "${formData.name}" has been created successfully!`,
           {
-            description: "You can now assign employees to this department.",
+            description: isSubDepartment
+              ? "Sub-department added to the parent department."
+              : "You can now assign employees to this department.",
             duration: 5000,
           }
         );
         
-        onCancel(); 
+        onCancel();
       } else {
         try {
           await onSave(formData);
@@ -194,6 +207,10 @@ export function DepartmentForm({
     }
   };
 
+  if (loadingData) {
+    return <SkeletonLoading />;
+  }
+
   return (
     <div className="min-h-full font-sans">
       <div className="flex justify-between items-start mb-6">
@@ -205,7 +222,11 @@ export function DepartmentForm({
             </span>
             {" / "}
             <span className="text-gray-600">
-              {department ? "Edit Department" : "Add New Department"}
+              {department
+                ? "Edit Department"
+                : formData.parent_department_id
+                ? "Add Sub-department"
+                : "Add New Department"}
             </span>
           </p>
         </div>
@@ -216,7 +237,7 @@ export function DepartmentForm({
       </div>
 
       <SectionCard
-        title={department ? "Edit Department" : "Add New Department"}
+        title={department ? "Edit Department" : formData.parent_department_id ? "Add Sub-department" : "Add New Department"}
         subtitle="Fill in the department details below"
       >
         

@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { FaChevronDown } from 'react-icons/fa6';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
 import useFetchHook from '../../../Hooks/UseFetchHook';
-import { createBudget } from '../financeApi';
 import { toast } from 'sonner';
+import usePost from '../../../Hooks/UsePostHook';
+import { Button } from '../../../components/ui/button';
+import { updateBudget, type Budget } from '../financeApi';
 
 interface BudgetFormData {
   title: string;
@@ -28,12 +31,23 @@ type DepartmentOption = {
 export const AddBudget = () => {
   // Navigation + dropdown state.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('editId');
+  const isEditMode = Boolean(editId);
   const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { postData, loading: isPostingBudget } = usePost<any>();
 
   const { data: departmentsData, isLoading: departmentsLoading } = useFetchHook(
     '/users/departments',
     'departments'
+  );
+
+  const { data: budgetRecord, isLoading: isBudgetLoading } = useFetchHook<Budget>(
+    editId ? `/finance/budgets/${editId}` : '',
+    `budget-${editId}`,
+    { enabled: Boolean(editId) }
   );
   
   // Form state for the budget draft.
@@ -52,6 +66,26 @@ export const AddBudget = () => {
   const selectedDepartment = departments.find(
     (dept) => dept.department_id === formData.department
   );
+  const isSaving = isSubmitting || isPostingBudget;
+
+  useEffect(() => {
+    if (!budgetRecord) return;
+
+    setFormData({
+      title: budgetRecord.description || '',
+      startDate: budgetRecord.start_date
+        ? new Date(budgetRecord.start_date).toISOString().slice(0, 10)
+        : '',
+      endDate: budgetRecord.end_date
+        ? new Date(budgetRecord.end_date).toISOString().slice(0, 10)
+        : '',
+      department: budgetRecord.department_id || budgetRecord.department?.department_id || '',
+      amountAllocated: budgetRecord.total_amount?.toString() || '',
+      amountSpent: '',
+      description: budgetRecord.description || '',
+      additionalNotes: budgetRecord.additional_notes || budgetRecord.notes || '',
+    });
+  }, [budgetRecord]);
 
   // Calculate variance based on current form values.
   const calculateVariance = (): { amount: number; status: VarianceStatus; percentage: number } => {
@@ -96,15 +130,32 @@ export const AddBudget = () => {
 
     try {
       setIsSubmitting(true);
-      await createBudget({
+      const payload = {
         department_id: formData.department,
         start_date: formData.startDate,
         end_date: formData.endDate,
         description: formData.description || formData.title || 'Budget draft',
         total_amount: parseFloat(formData.amountAllocated),
         additional_notes: formData.additionalNotes || undefined,
-      });
-      toast.success('Budget saved as draft.');
+      };
+
+      if (isEditMode && editId) {
+        await updateBudget(editId, {
+          start_date: payload.start_date,
+          end_date: payload.end_date,
+          description: payload.description,
+          total_amount: payload.total_amount,
+          additional_notes: payload.additional_notes,
+        });
+      } else {
+        await postData('/finance/budgets', payload);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['finance-budgets'] });
+      queryClient.removeQueries({ queryKey: ['finance-budgets'] });
+      if (editId) {
+        queryClient.removeQueries({ queryKey: [`budget-${editId}`] });
+      }
+      toast.success(isEditMode ? 'Budget updated successfully.' : 'Budget saved as draft.');
       navigate('/dashboard/budgeting');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to save budget');
@@ -122,15 +173,32 @@ export const AddBudget = () => {
 
     try {
       setIsSubmitting(true);
-      await createBudget({
+      const payload = {
         department_id: formData.department,
         start_date: formData.startDate,
         end_date: formData.endDate,
         description: formData.description || formData.title || 'Budget submission',
         total_amount: parseFloat(formData.amountAllocated),
         additional_notes: formData.additionalNotes || undefined,
-      });
-      toast.success('Budget submitted successfully.');
+      };
+
+      if (isEditMode && editId) {
+        await updateBudget(editId, {
+          start_date: payload.start_date,
+          end_date: payload.end_date,
+          description: payload.description,
+          total_amount: payload.total_amount,
+          additional_notes: payload.additional_notes,
+        });
+      } else {
+        await postData('/finance/budgets', payload);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['finance-budgets'] });
+      queryClient.removeQueries({ queryKey: ['finance-budgets'] });
+      if (editId) {
+        queryClient.removeQueries({ queryKey: [`budget-${editId}`] });
+      }
+      toast.success(isEditMode ? 'Budget updated successfully.' : 'Budget submitted successfully.');
       navigate('/dashboard/budgeting');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to submit budget');
@@ -139,7 +207,7 @@ export const AddBudget = () => {
     }
   };
 
-  if (departmentsLoading || isSubmitting) {
+  if (departmentsLoading || isBudgetLoading) {
     return <SkeletonLoading />
   }
 
@@ -149,30 +217,39 @@ export const AddBudget = () => {
         {/* Title and Action Buttons */}
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Add New Budget</h1>
-            <p className="text-sm text-gray-500">Draft</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              {isEditMode ? 'Edit Budget' : 'Add New Budget'}
+            </h1>
+            <p className="text-sm text-gray-500">{isEditMode ? 'Update budget details' : 'Draft'}</p>
           </div>
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={handleCancel}
-              className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              disabled={isSaving}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAsDraft}
-              className="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Save as Draft
-            </button>
-            <button
+            </Button>
+            {!isEditMode && (
+              <Button
+                variant="outline"
+                type="button"
+                onClick={handleSaveAsDraft}
+                disabled={isSaving}
+                loading={isSaving}
+              >
+                Save as Draft
+              </Button>
+            )}
+            <Button
               type="submit"
-              className="px-6 py-2.5 bg-indigo-900 text-white rounded-lg font-medium hover:bg-indigo-800 transition-colors"
+              className="bg-indigo-900 hover:bg-indigo-800"
+              disabled={isSaving}
+              loading={isSaving}
             >
-              Submit for Approval
-            </button>
+              {isEditMode ? 'Save Changes' : 'Submit for Approval'}
+            </Button>
           </div>
         </div>
 
@@ -246,6 +323,7 @@ export const AddBudget = () => {
                   <button
                     type="button"
                     onClick={() => setShowDepartmentDropdown(!showDepartmentDropdown)}
+                    disabled={isEditMode}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center bg-white"
                   >
                     <span className={formData.department ? 'text-gray-900' : 'text-gray-400'}>

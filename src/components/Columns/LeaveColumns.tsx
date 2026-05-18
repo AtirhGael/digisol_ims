@@ -2,7 +2,7 @@ import React from "react";
 import { Check, X, Eye, Pencil, Trash2 } from "lucide-react";
 import { FaEllipsisVertical } from "react-icons/fa6";
 
-type LeaveStatus = "Active" | "On Leave";
+export type LeaveStatus = "Present" | "Absent" | "Late" | "On Leave" | "No Record";
 
 interface LeaveRow {
   id: string;
@@ -15,6 +15,22 @@ interface LeaveRow {
   approvalStatus?: string;
 }
 
+const statusClasses: Record<LeaveStatus, string> = {
+  Present: "bg-green-100 text-green-800",
+  Absent: "bg-red-100 text-red-800",
+  Late: "bg-amber-100 text-amber-800",
+  "On Leave": "bg-blue-100 text-blue-800",
+  "No Record": "bg-gray-100 text-gray-700",
+};
+
+const statusDotClasses: Record<LeaveStatus, string> = {
+  Present: "bg-green-500",
+  Absent: "bg-red-500",
+  Late: "bg-amber-500",
+  "On Leave": "bg-blue-500",
+  "No Record": "bg-gray-500",
+};
+
 function LeaveActionMenu({
   rowId,
   openMenuId,
@@ -22,6 +38,7 @@ function LeaveActionMenu({
   onView,
   onEdit,
   onDelete,
+  showEdit = true,
 }: {
   rowId: string;
   openMenuId: string | null;
@@ -29,6 +46,7 @@ function LeaveActionMenu({
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  showEdit?: boolean;
 }) {
   const isOpen = openMenuId === rowId;
   return (
@@ -52,13 +70,15 @@ function LeaveActionMenu({
           >
             <Eye size={15} /> View
           </button>
-          <button
-            type="button"
-            className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
-            onClick={onEdit}
-          >
-            <Pencil size={15} /> Edit
-          </button>
+          {showEdit ? (
+            <button
+              type="button"
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
+              onClick={onEdit}
+            >
+              <Pencil size={15} /> Edit
+            </button>
+          ) : null}
           <button
             type="button"
             className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
@@ -106,8 +126,10 @@ const baseLeaveColumns = () => [
     key: "status",
     header: "Status",
     render: (value: LeaveStatus) => (
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 whitespace-nowrap">
-        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5" />
+      <span
+        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusClasses[value]}`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusDotClasses[value]}`} />
         {value}
       </span>
     ),
@@ -128,12 +150,14 @@ export const createLeaveColumns = ({
   onView,
   onEdit,
   onDelete,
+  showEdit = true,
 }: {
   openMenuId: string | null;
   onToggleMenu: (id: string | null) => void;
   onView: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  showEdit?: boolean;
 }) => [
   ...baseLeaveColumns(),
   {
@@ -148,20 +172,47 @@ export const createLeaveColumns = ({
         onView={() => onView(row.id)}
         onEdit={() => onEdit(row.id)}
         onDelete={() => onDelete(row.id)}
+        showEdit={showEdit}
       />
     ),
   },
 ];
 
-// Columns for Pending Requests tab — with approve/reject buttons
+// Columns for Pending Requests tab — with approve/reject/edit buttons
 export const createPendingLeaveColumns = ({
   onApprove,
   onReject,
+  onEdit,
 }: {
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onEdit?: (id: string) => void;
 }) => [
   ...baseLeaveColumns(),
+  {
+    key: "approvalStatus",
+    header: "Stage",
+    truncate: false,
+    render: (value: string) => {
+      const isManagerApproved = value === "Manager Approved";
+      return (
+        <span
+          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+            isManagerApproved
+              ? "bg-amber-100 text-amber-800"
+              : "bg-blue-100 text-blue-800"
+          }`}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+              isManagerApproved ? "bg-amber-500" : "bg-blue-500"
+            }`}
+          />
+          {isManagerApproved ? "Awaiting HR" : "Awaiting Manager"}
+        </span>
+      );
+    },
+  },
   {
     key: "id",
     header: "Actions",
@@ -171,7 +222,7 @@ export const createPendingLeaveColumns = ({
         <button
           onClick={() => onApprove(row.id)}
           className="p-1.5 sm:p-2 text-white bg-green-500 hover:bg-green-600 rounded-md transition-colors cursor-pointer"
-          title="Approve"
+          title={row.approvalStatus === "Manager Approved" ? "Final Approve (HR)" : "Approve (Manager)"}
         >
           <Check className="w-3 h-3 sm:w-4 sm:h-4" />
         </button>
@@ -182,6 +233,15 @@ export const createPendingLeaveColumns = ({
         >
           <X className="w-3 h-3 sm:w-4 sm:h-4" />
         </button>
+        {onEdit && (
+          <button
+            onClick={() => onEdit(row.id)}
+            className="p-1.5 sm:p-2 text-white bg-blue-500 hover:bg-blue-600 rounded-md transition-colors cursor-pointer"
+            title="Edit"
+          >
+            <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
+          </button>
+        )}
       </div>
     ),
   },

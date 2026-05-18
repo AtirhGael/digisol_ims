@@ -1,38 +1,53 @@
 import { Users, UserPlus, UserMinus } from 'lucide-react';
 import { Card } from '../../../../components/other/Card';
 
-interface AttendanceCardsProps {}
+interface AttendanceCardsProps {
+  totalStaff: number;
+  present: number;
+  absent: number;
+  late: number;
+  onLeave: number;
+}
 
-export const AttendanceCards: React.FC<AttendanceCardsProps> = () => (
+export const AttendanceCards: React.FC<AttendanceCardsProps> = ({
+  totalStaff,
+  present,
+  absent,
+  late,
+  onLeave,
+}) => {
+  const safePercent = (value: number) => (totalStaff > 0 ? `${Math.round((value / totalStaff) * 100)}%` : '0%');
+
+  return (
   <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2'>
     <Card
       heading='Total Staff'
-      amount='10'
+      amount={String(totalStaff)}
       icons={<Users className='text-white' size={18} />}
     />
     <Card
       heading='Present'
-      amount='10'
+      amount={String(present)}
       icons={<UserPlus className='text-white' size={18} />}
-      currency='100%'
+      currency={safePercent(present)}
     />
     <Card
       heading='Absent'
-      amount='0'
+      amount={String(absent)}
       icons={<UserMinus className='text-white' size={18} />}
-      currency='0%'
+      currency={safePercent(absent)}
     />
     <Card
       heading='Late'
-      amount='2'
+      amount={String(late)}
       icons={<Users className='text-white' size={18} />}
-      currency='20%'
+      currency={safePercent(late)}
     />
     <Card
       heading='On Leave'
-      amount='0'
+      amount={String(onLeave)}
       icons={<Users className='text-white' size={18} />}
-      currency='0%'
+      currency={safePercent(onLeave)}
     />
   </div>
-);
+)};

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from '../ui/button';
+import { Button } from '../ui/Button';
 
 
 // Type definitions
@@ -9,12 +9,12 @@ export interface Task {
   description: string;
   assignedTo: string;
   assignedBy: string;
-  projectCategory: string;
+  projectCategory?: string;
   projectName: string;
   progress: number;
   startDate: string;
   dueDate: string;
-  priority: 'Low' | 'Medium' | 'High';
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
   notes?: string;
 }
 
@@ -55,6 +55,8 @@ const TaskDetailPage: React.FC<TaskDetailProps> = ({
         return 'bg-cyan-100 text-cyan-600';
       case 'Low':
         return 'bg-green-100 text-green-600';
+      case 'Critical':
+        return 'bg-purple-100 text-purple-700';
       default:
         return 'bg-gray-100 text-gray-600';
     }

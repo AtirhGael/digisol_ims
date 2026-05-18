@@ -1,6 +1,6 @@
 import React, { useRef,useEffect, useState } from 'react';
 import {X} from 'lucide-react'
-import { Button } from '../ui/button';
+import { Button } from '../ui/Button';
 
 interface TaskFormData {
   taskName: string;

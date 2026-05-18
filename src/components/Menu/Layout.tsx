@@ -2,8 +2,10 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { MainSideBar } from "../Sidebar/MainSideBar";
 import { UserProfile } from "../other/UserProfile";
 import { FiColumns, FiX } from "react-icons/fi";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { Loader } from "../other/Loader/Loader";
 import { useUserStore } from "../../Store/UserStore";
+import useFetchHook from "../../Hooks/UseFetchHook";
 import "./Layout.css"; // Import CSS for animations
 
 export const Layout = () => {
@@ -11,6 +13,12 @@ export const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const passwordMustChange = useUserStore((s) => s.passwordMustChange);
+  const { data: unreadData } = useFetchHook<{ count: number }>(
+    '/notifications/unread-count',
+    'unread-count',
+    { staleTime: 30_000 }
+  );
+  const unreadCount = unreadData?.count ?? 0;
 
   const toggleMenu = () => {
     setIsMenuOpen((prev) => !prev);
@@ -51,11 +59,11 @@ export const Layout = () => {
       {/* side bar */}
       {/* mobile sidebar */}
       <div
-        className={`w-full min-h-screen lg:hidden bg-white/10 backdrop-blur-[2px] fixed top-0 left-0 z-30 backdrop-sepia-0 p-2 rounded-lg transition-transform duration-300 ease-in-out ${
+        className={`w-full min-h-screen lg:hidden backdrop-blur-[2px] z-50 fixed top-0 left-0 backdrop-sepia-0 p-2 rounded-lg transition-transform duration-300 ease-in-out ${
           isMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="max-w-70 h-screen bg-white shadow-xl sidebar no-scrollbar z-40 sticky top-2 rounded-xl p-2">
+        <div className="max-w-70 overflow-y-auto h-screen bg-white shadow-xl sidebar no-scrollbar z-30 sticky top-2 rounded-xl p-2">
           {/* logo */}
           <img
             src="/src/Assets/digisolLogo 1.png"
@@ -91,7 +99,7 @@ export const Layout = () => {
       </div>
       <div className="w-full flex flex-col gap-2">
         {/* main content section */}
-        <div className="bg-background min-h-17 flex justify-between z-50 lg:justify-end items-center px-2 lg:px-4 w-full rounded-xl">
+        <div className="bg-background min-h-17 flex justify-between lg:justify-end items-center px-2 lg:px-4 w-full rounded-xl">
           {/* open menu */}
           <div className="lg:hidden flex">
             <FiColumns
@@ -102,12 +110,14 @@ export const Layout = () => {
           </div>
           {/* user profile */}
           <div>
-            <UserProfile notifications={3} />
+            <UserProfile notifications={unreadCount} />
           </div>
         </div>
         {/* main content */}
         <div className="w-full bg-background overflow-scroll rounded-xl p-2 lg:px-4 py-5 transition-all duration-300 ease-in-out animate-in fade-in-0 slide-in-from-right-2">
-          <Outlet />
+          <Suspense fallback={<Loader />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </div>

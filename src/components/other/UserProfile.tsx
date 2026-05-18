@@ -34,7 +34,7 @@ export const UserProfile = ({
           className="relative cursor-pointer"
         >
           <FaBell className="text-3xl text-primary" />
-          {notifications && notifications > 0 && (
+          {typeof notifications === 'number' && notifications > 0 && (
             <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
               {notifications}
             </span>

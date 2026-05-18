@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useUserStore } from "../../../Store/UserStore";
 import {
   FaBuilding,
   FaUsers,
@@ -7,35 +8,13 @@ import {
   FaEdit,
   FaArrowLeft,
 } from "react-icons/fa";
+import { LuPlus } from "react-icons/lu";
 import { SelectField } from "./components/DepartmentForm.shared";
 import SkeletonLoading from "../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
-import useFetchHook from "../../../Hooks/UseFetchHook";
-import { useUpdate } from "../../../Hooks/UseUpdateHook";
+import { useFetchHook } from "../../../Hooks/UseFetchHook";
+import useUpdate from "../../../Hooks/UseUpdateHook";
 import { toast } from "sonner";
-import axios from "axios";
-import { useUserStore } from "../../../Store/UserStore";
 import { Button } from "@/components/ui/button";
-
-const API_BASE_URL =
-  import.meta.env.VITE_BASE_URL?.replace("/api", "") || "http://localhost:4000";
-
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-apiClient.interceptors.request.use(
-  (config) => {
-    const accessToken =
-      useUserStore.getState().accessToken ||
-      localStorage.getItem("accessToken");
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
 
 interface User {
   user_id: string;
@@ -79,8 +58,10 @@ interface Staff {
   last_name: string;
   email: string;
   username: string;
-  assignment_date: string;
-  assigned_by: string;
+  assignment_date?: string;
+  assigned_by?: string;
+  employment_type?: string | null;
+  position?: string | null;
 }
 
 interface DepartmentDetailsData {
@@ -106,87 +87,60 @@ interface DepartmentDetailsData {
 const DepartmentDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Edit-only option lists are fetched lazily so read mode stays lighter.
   const [activeTab, setActiveTab] = useState("overview");
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<User[]>([]);
-  const [departments, setDepartments] = useState<DepartmentListItem[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useFetchHook<{
     success: boolean;
     data: DepartmentDetailsData;
   }>(`/departments/${id}`, `department-${id}`, { enabled: !!id });
 
-  const { updateData } = useUpdate();
+  const { data: usersResponse, isLoading: loadingUsers } = useFetchHook<{
+    success: boolean;
+    data: { users: User[] };
+  }>(`/users?status=ACTIVE`, `dept-detail-users`, { enabled: isEditing });
 
-  useEffect(() => {
-    const loadDropdownData = async () => {
-      setLoadingData(true);
-      try {
-        const [usersRes, deptRes] = await Promise.all([
-          apiClient.get(`/api/users`, { params: { status: "ACTIVE" } }),
-          apiClient.get(`/api/departments`),
-        ]);
+  const { data: deptsResponse, isLoading: loadingDepts } = useFetchHook<{
+    success: boolean;
+    data: { departments: DepartmentListItem[] };
+  }>(`/departments`, `dept-detail-depts`, { enabled: isEditing });
 
-        if (usersRes.data?.data?.users) {
-          setUsers(usersRes.data.data.users);
-        }
-        if (deptRes.data?.data?.departments) {
-          const depts = deptRes.data.data.departments;
-          setDepartments(
-            depts.filter((d: DepartmentListItem) => d.department_id !== id),
-          );
-        }
-      } catch (err) {
-        console.error("Failed to load dropdown data:", err);
-      } finally {
-        setLoadingData(false);
-      }
-    };
+  const users: User[] = usersResponse?.data?.users ?? [];
+  const departments: DepartmentListItem[] = (deptsResponse?.data?.departments ?? []).filter(
+    (d) => d.department_id !== id
+  );
+  const loadingData = loadingUsers || loadingDepts;
 
-    if (isEditing) {
-      loadDropdownData();
-    }
-  }, [isEditing, id]);
+  const { updateData, loading: savingDept } = useUpdate();
 
   const handleBack = () => {
     navigate("/dashboard/departments");
   };
 
   const handleEditToggle = () => {
-    const { roles, permissions } = useUserStore.getState();
+    const { roles } = useUserStore.getState();
     const isSuperAdmin = roles.includes("SUPER_ADMIN");
-    const hasUpdatePermission =
-      isSuperAdmin ||
-      permissions.some(
-        (p: any) =>
-          p.module === "hr" &&
-          p.resource_type === "employee" &&
-          p.action === "UPDATE",
-      );
-    if (!hasUpdatePermission) {
+    if (!isSuperAdmin) {
       navigate("/dashboard/unauthorized");
       return;
     }
     setIsEditing(!isEditing);
   };
 
+  // Saving edits keeps the user on the detail page and refreshes the department snapshot.
   const handleSave = async (formData: any) => {
-    setLoading(true);
     try {
-      await apiClient.put(`/api/departments/${id}`, formData);
+      await updateData(`/departments/${id}`, formData, 'put');
       toast.success("Department updated successfully");
       setIsEditing(false);
       refetch();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update department");
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || loadingData) {
     return <SkeletonLoading />;
   }
 
@@ -209,7 +163,7 @@ const DepartmentDetails: React.FC = () => {
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Breadcrumb */}
       <div className="mb-4">
-        <p
+        <p 
           className="text-sm hover:text-primary cursor-pointer text-gray-600"
           onClick={handleBack}
         >
@@ -222,7 +176,7 @@ const DepartmentDetails: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 rounded-full flex items-center justify-center bg-(--primary) text-white font-bold text-2xl">
-              {department?.name?.charAt(0)?.toUpperCase() || "D"}
+              {department?.name?.charAt(0)?.toUpperCase() || 'D'}
             </div>
             <div className="flex flex-col gap-2">
               <div>
@@ -230,14 +184,10 @@ const DepartmentDetails: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">{department?.code}</p>
               </div>
               <div className="flex items-center gap-3 mt-2">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    department?.status === "ACTIVE"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {department?.status || "UNKNOWN"}
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  department?.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {department?.status || 'UNKNOWN'}
                 </span>
                 {department?.parent_department && (
                   <span className="text-sm text-gray-500 flex items-center gap-1">
@@ -248,8 +198,8 @@ const DepartmentDetails: React.FC = () => {
               </div>
             </div>
           </div>
-          <Button
-            variant="outline"
+          <Button 
+            variant="outline" 
             onClick={handleEditToggle}
             className="flex items-center gap-2"
           >
@@ -300,22 +250,21 @@ const DepartmentDetails: React.FC = () => {
         {/* Tab Content */}
         <div className="p-6">
           {activeTab === "overview" && (
-            <OverviewTab
-              department={department}
-              isEditing={isEditing}
-              onSave={handleSave}
-              loading={loading}
+            <OverviewTab 
+              department={department} 
+              isEditing={isEditing} 
+              onSave={handleSave} 
+              loading={savingDept}
               users={users}
               departments={departments}
               loadingData={loadingData}
             />
           )}
-          {activeTab === "staff" && (
-            <StaffTab staff={department?.staff || []} />
-          )}
+          {activeTab === "staff" && <StaffTab staff={department?.staff || []} />}
           {activeTab === "sub-departments" && (
             <SubDepartmentsTab
               subDepartments={department?.sub_departments || []}
+              parentDepartmentId={department?.department_id ?? ""}
             />
           )}
         </div>
@@ -335,14 +284,14 @@ interface OverviewTabProps {
   loadingData: boolean;
 }
 
-const OverviewTab: React.FC<OverviewTabProps> = ({
-  department,
-  isEditing,
-  onSave,
+const OverviewTab: React.FC<OverviewTabProps> = ({ 
+  department, 
+  isEditing, 
+  onSave, 
   loading,
   users,
   departments,
-  loadingData,
+  loadingData
 }) => {
   const [formData, setFormData] = useState({
     name: department?.name || "",
@@ -385,16 +334,14 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
   };
 
   const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Department Name
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Department Name</label>
           {isEditing ? (
             <input
               type="text"
@@ -407,16 +354,12 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Department Code
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Department Code</label>
           {isEditing ? (
             <input
               type="text"
               value={formData.code}
-              onChange={(e) =>
-                handleChange("code", e.target.value.toUpperCase())
-              }
+              onChange={(e) => handleChange("code", e.target.value.toUpperCase())}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             />
           ) : (
@@ -424,9 +367,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Status
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Status</label>
           {isEditing ? (
             <select
               value={formData.status}
@@ -437,34 +378,24 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               <option value="INACTIVE">INACTIVE</option>
             </select>
           ) : (
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                department?.status === "ACTIVE"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+              department?.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+            }`}>
               {department?.status}
             </span>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Department Head
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Department Head</label>
           {isEditing ? (
             <select
               value={formData.department_head_id}
-              onChange={(e) =>
-                handleChange("department_head_id", e.target.value)
-              }
+              onChange={(e) => handleChange("department_head_id", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             >
               <option value="">Select Department Head</option>
               {loadingData ? (
-                <option value="" disabled>
-                  Loading...
-                </option>
+                <option value="" disabled>Loading...</option>
               ) : (
                 users.map((user) => (
                   <option key={user.user_id} value={user.user_id}>
@@ -475,49 +406,37 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
             </select>
           ) : (
             <p className="text-gray-900">
-              {department?.department_head
-                ? `${department.department_head.first_name} ${department.department_head.last_name}`
-                : "Not assigned"}
+              {department?.department_head ? `${department.department_head.first_name} ${department.department_head.last_name}` : "Not assigned"}
             </p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Parent Department
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Parent Department</label>
           {isEditing ? (
             <select
               value={formData.parent_department_id}
-              onChange={(e) =>
-                handleChange("parent_department_id", e.target.value)
-              }
+              onChange={(e) => handleChange("parent_department_id", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             >
               <option value="">No Parent (Main Department)</option>
               {loadingData ? (
-                <option value="" disabled>
-                  Loading...
-                </option>
+                <option value="" disabled>Loading...</option>
               ) : (
                 departments.map((dept) => (
                   <option key={dept.department_id} value={dept.department_id}>
-                    {dept?.name}
+                    {dept?.name} 
                   </option>
                 ))
               )}
             </select>
           ) : (
             <p className="text-gray-900">
-              {department?.parent_department
-                ? department.parent_department.department_name
-                : "None (Main Department)"}
+              {department?.parent_department ? department.parent_department.department_name : "None (Main Department)"}
             </p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Location
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Location</label>
           {isEditing ? (
             <input
               type="text"
@@ -527,15 +446,11 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               placeholder="Enter location"
             />
           ) : (
-            <p className="text-gray-900">
-              {department?.location || "Not specified"}
-            </p>
+            <p className="text-gray-900">{department?.location || "Not specified"}</p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Contact Email
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Contact Email</label>
           {isEditing ? (
             <input
               type="email"
@@ -545,15 +460,11 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               placeholder="Enter email"
             />
           ) : (
-            <p className="text-gray-900">
-              {department?.contact_email || "Not specified"}
-            </p>
+            <p className="text-gray-900">{department?.contact_email || "Not specified"}</p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Contact Phone
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Contact Phone</label>
           {isEditing ? (
             <input
               type="tel"
@@ -563,37 +474,27 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               placeholder="Enter phone"
             />
           ) : (
-            <p className="text-gray-900">
-              {department?.contact_phone || "Not specified"}
-            </p>
+            <p className="text-gray-900">{department?.contact_phone || "Not specified"}</p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Budget Allocation (XAF)
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Budget Allocation (XAF)</label>
           {isEditing ? (
             <input
               type="number"
               value={formData.budget_allocation}
-              onChange={(e) =>
-                handleChange("budget_allocation", e.target.value)
-              }
+              onChange={(e) => handleChange("budget_allocation", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
               placeholder="Enter budget"
             />
           ) : (
             <p className="text-gray-900">
-              {department?.budget_allocation
-                ? `XAF ${Number(department.budget_allocation).toLocaleString()}`
-                : "Not specified"}
+              {department?.budget_allocation ? `XAF ${Number(department.budget_allocation).toLocaleString()}` : "Not specified"}
             </p>
           )}
         </div>
         <div className="md:col-span-2 lg:col-span-3">
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Description
-          </label>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Description</label>
           {isEditing ? (
             <textarea
               value={formData.description}
@@ -602,36 +503,22 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
               rows={3}
             />
           ) : (
-            <p className="text-gray-900">
-              {department?.description || "No description"}
-            </p>
+            <p className="text-gray-900">{department?.description || "No description"}</p>
           )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Created At
-          </label>
-          <p className="text-gray-900">
-            {department?.created_at
-              ? new Date(department.created_at).toLocaleString()
-              : "N/A"}
-          </p>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Created At</label>
+          <p className="text-gray-900">{department?.created_at ? new Date(department.created_at).toLocaleString() : "N/A"}</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">
-            Updated At
-          </label>
-          <p className="text-gray-900">
-            {department?.updated_at
-              ? new Date(department.updated_at).toLocaleString()
-              : "N/A"}
-          </p>
+          <label className="block text-sm font-medium text-gray-500 mb-1">Updated At</label>
+          <p className="text-gray-900">{department?.updated_at ? new Date(department.updated_at).toLocaleString() : "N/A"}</p>
         </div>
       </div>
       {isEditing && (
         <div className="flex gap-3 pt-4 border-t border-gray-200">
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Saving..." : "Save Changes"}
+          <Button onClick={handleSubmit} disabled={loading} loading={loading}>
+            Save Changes
           </Button>
         </div>
       )}
@@ -659,6 +546,12 @@ const StaffTab: React.FC<{ staff: Staff[] }> = ({ staff }) => {
               Name
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Type
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              Position
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
               Email
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -675,20 +568,27 @@ const StaffTab: React.FC<{ staff: Staff[] }> = ({ staff }) => {
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-(--primary) text-white flex items-center justify-center text-sm font-medium">
-                    {member.first_name?.charAt(0)}
-                    {member.last_name?.charAt(0)}
+                    {member.first_name?.charAt(0)}{member.last_name?.charAt(0)}
                   </div>
-                  <span className="font-medium">
-                    {member.first_name} {member.last_name}
-                  </span>
+                  <span className="font-medium">{member.first_name} {member.last_name}</span>
                 </div>
               </td>
+              <td className="px-4 py-3">
+                {member.employment_type === "INTERNSHIP" ? (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    Intern
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Employee
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-gray-600">{member.position || "—"}</td>
               <td className="px-4 py-3 text-gray-600">{member.email}</td>
               <td className="px-4 py-3 text-gray-600">{member.username}</td>
               <td className="px-4 py-3 text-gray-600">
-                {member.assignment_date
-                  ? new Date(member.assignment_date).toLocaleDateString()
-                  : "N/A"}
+                {member.assignment_date ? new Date(member.assignment_date).toLocaleDateString() : "N/A"}
               </td>
             </tr>
           ))}
@@ -699,58 +599,74 @@ const StaffTab: React.FC<{ staff: Staff[] }> = ({ staff }) => {
 };
 
 // Sub-departments Tab Component
-const SubDepartmentsTab: React.FC<{ subDepartments: SubDepartment[] }> = ({
-  subDepartments,
-}) => {
+const SubDepartmentsTab: React.FC<{ subDepartments: SubDepartment[]; parentDepartmentId: string }> = ({ subDepartments, parentDepartmentId }) => {
+  const navigate = useNavigate();
+  const { roles } = useUserStore.getState();
+  const isSuperAdmin = roles.includes("SUPER_ADMIN");
+
+  const handleAddSubDepartment = () => {
+    if (!isSuperAdmin) {
+      navigate("/dashboard/unauthorized");
+      return;
+    }
+    navigate("/dashboard/departments", {
+      state: { openAddForm: true, parentDepartmentId },
+    });
+  };
+
   if (subDepartments.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
         <FaSitemap className="w-12 h-12 mx-auto mb-3 text-gray-300" />
         <p>No sub-departments</p>
+        {isSuperAdmin && (
+          <Button className="mt-4 gap-2" onClick={handleAddSubDepartment}>
+            <LuPlus className="w-4 h-4" />
+            Add Sub-department
+          </Button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              Department Name
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              Code
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {subDepartments.map((subDept) => (
-            <tr key={subDept.department_id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-medium">
-                {subDept.department_name}
-              </td>
-              <td className="px-4 py-3 text-gray-600">
-                {subDept.department_code}
-              </td>
-              <td className="px-4 py-3">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    subDept.status === "ACTIVE"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  {subDept.status}
-                </span>
-              </td>
+    <div>
+      {isSuperAdmin && (
+        <div className="flex justify-end mb-4">
+          <Button className="gap-2" onClick={handleAddSubDepartment}>
+            <LuPlus className="w-4 h-4" />
+            Add Sub-department
+          </Button>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department Name</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {subDepartments.map((subDept) => (
+              <tr key={subDept.department_id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium">{subDept.department_name}</td>
+                <td className="px-4 py-3 text-gray-600">{subDept.department_code}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    subDept.status === 'ACTIVE' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {subDept.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

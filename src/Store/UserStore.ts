@@ -15,6 +15,15 @@ interface User {
   username: string;
   email: string;
   avatar_url?: string | null;
+  roles?: string[];
+  password_must_change?: boolean;
+}
+
+interface LoginResponseData {
+  user: User;
+  token: string;
+  refresh_token: string;
+  permissions?: Permission[];
 }
 
 interface UserStore {
@@ -24,6 +33,7 @@ interface UserStore {
   resetEmail: string | null;
   accessToken: string | null;
   isInitialized: boolean;
+  isInitializing: boolean;
   passwordMustChange: boolean;
   setUser: (user: User) => void;
   setRoles: (roles: string[]) => void;
@@ -33,6 +43,7 @@ interface UserStore {
   setInitialized: (initialized: boolean) => void;
   setPasswordMustChange: (mustChange: boolean) => void;
   updateAvatarUrl: (url: string) => void;
+  loginUser: (credentials: { email: string; password: string }) => Promise<LoginResponseData>;
   clearUser: () => void;
   initializeAuth: () => Promise<void>;
 }
@@ -44,6 +55,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   resetEmail: null,
   accessToken: null,
   isInitialized: false,
+  isInitializing: false,
   passwordMustChange: false,
   setUser: (user) => set({ user }),
   setRoles: (roles) => set({ roles }),
@@ -57,7 +69,41 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set((state) => ({
       user: state.user ? { ...state.user, avatar_url: url } : null,
     })),
-  clearUser: () =>
+  loginUser: async ({ email, password }) => {
+    const response = await fetch(`${baseURL}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.message || "Login failed. Please try again.");
+    }
+
+    const loginData: LoginResponseData = data.data;
+    const mustChangePassword = loginData?.user?.password_must_change || false;
+    const roles = loginData?.user?.roles ?? [];
+    const permissions = loginData?.permissions ?? [];
+
+    set({
+      user: loginData.user,
+      accessToken: loginData.token,
+      roles,
+      permissions,
+      passwordMustChange: mustChangePassword,
+      isInitialized: true,
+    });
+
+    localStorage.setItem("refreshToken", loginData.refresh_token);
+
+    return loginData;
+  },
+  clearUser: () => {
+    localStorage.removeItem("accessToken");
     set({
       user: null,
       roles: [],
@@ -65,13 +111,20 @@ export const useUserStore = create<UserStore>((set, get) => ({
       resetEmail: null,
       accessToken: null,
       passwordMustChange: false,
-    }),
+    });
+  },
   initializeAuth: async () => {
+    if (get().isInitializing || get().isInitialized) {
+      return;
+    }
+
+    set({ isInitializing: true });
+
     try {
       const refreshToken = localStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        set({ isInitialized: true });
+        set({ isInitialized: true, isInitializing: false });
         return;
       }
       // Try to refresh the access token
@@ -114,7 +167,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
           permissions: permissions ?? [],
           passwordMustChange: mustChangePassword,
           isInitialized: true,
+          isInitializing: false,
         });
+
+        const finalAccessToken = token || responseData.accessToken;
+        if (finalAccessToken) {
+          localStorage.setItem("accessToken", finalAccessToken);
+        }
 
         // Only update localStorage if a NEW refresh token was actually provided
         const finalRefreshToken = newRefreshToken || responseData.refreshToken;
@@ -122,24 +181,32 @@ export const useUserStore = create<UserStore>((set, get) => ({
           localStorage.setItem("refreshToken", finalRefreshToken);
         }
       } else {
+        localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
         set({
           user: null,
+          roles: [],
+          permissions: [],
           accessToken: null,
           resetEmail: null,
           passwordMustChange: false,
           isInitialized: true,
+          isInitializing: false,
         });
       }
     } catch (error) {
       // Error during refresh, clear everything
+      localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
       set({
         user: null,
+        roles: [],
+        permissions: [],
         accessToken: null,
         resetEmail: null,
         passwordMustChange: false,
         isInitialized: true,
+        isInitializing: false,
       });
     }
   },

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { HeadingComponent } from '../../../components/other/HeadingComponent';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -7,11 +8,14 @@ import { Label } from '../../../components/ui/label';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
 import { toast } from 'sonner';
 import useFetchHook from '../../../Hooks/UseFetchHook';
-import { createPayrollRecord, updatePayrollRecord, type PayrollRecordApi } from '../financeApi';
+import { type PayrollRecordApi } from '../financeApi';
+import usePost from '../../../Hooks/UsePostHook';
+import useUpdate from '../../../Hooks/UseUpdateHook';
 
 export const AddPayroll = () => {
   // Navigation + query params.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   // Edit mode state from URL.
   const editId = searchParams.get('editId');
@@ -29,12 +33,14 @@ export const AddPayroll = () => {
     allowance: '',
     deductions: '',
     // Status + approvals (backend-driven fields)
-    status: 'PENDING',
+    status: 'UNPAID',
     paymentReference: '',
     financialClerkApproval: 'NO',
     managerApproval: 'NO',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { postData, loading: isCreatingPayroll } = usePost<any>();
+  const { updateData, loading: isUpdatingPayroll } = useUpdate<any>();
 
   // Load employees for the select dropdown.
   const { data: employeesResponse, isLoading: isEmployeesLoading, isError: isEmployeesError } = useFetchHook<any>(
@@ -75,10 +81,6 @@ export const AddPayroll = () => {
     }
   }, [employees, formData.employeeId, formData.jobTitle]);
 
-  if (isLoading) {
-    return <SkeletonLoading />
-  }
-
   // Pre-fill the form when editing an existing record.
   useEffect(() => {
     if (!editId) return;
@@ -89,7 +91,7 @@ export const AddPayroll = () => {
     }
     if (!payrollRecord) return;
     setFormData({
-      payrollId: payrollRecord.payroll_id || '',
+      payrollId: payrollRecord.payroll_period || payrollRecord.payroll_id || '',
       employeeId: payrollRecord.employee_id || '',
       jobTitle: payrollRecord.department_name || '',
       basicWage: payrollRecord.gross_salary ? payrollRecord.gross_salary.toString() : '',
@@ -98,12 +100,16 @@ export const AddPayroll = () => {
       paymentDate: payrollRecord.pay_date ? new Date(payrollRecord.pay_date).toISOString().slice(0, 10) : '',
       allowance: payrollRecord.allowance ? payrollRecord.allowance.toString() : '',
       deductions: payrollRecord.total_deduction ? payrollRecord.total_deduction.toString() : '',
-      status: payrollRecord.status || 'PENDING',
+      status: payrollRecord.status === 'PAID' ? 'PAID' : 'UNPAID',
       paymentReference: payrollRecord.payment_reference_number || '',
       financialClerkApproval: payrollRecord.signature_approvals?.financial_clerk || 'NO',
       managerApproval: payrollRecord.signature_approvals?.manager || 'NO',
     });
   }, [editId, isRecordError, navigate, payrollRecord, recordError]);
+
+  if (isLoading) {
+    return <SkeletonLoading />
+  }
 
   // Input change handler for all text inputs.
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +135,11 @@ export const AddPayroll = () => {
       return;
     }
 
+    if (!isEditing && !formData.paymentDate) {
+      toast.error('Please provide a payment date');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const basicSalary = parseAmount(formData.basicWage);
@@ -138,23 +149,35 @@ export const AddPayroll = () => {
 
       if (isEditing && editId) {
         // Backend supports status + approval updates on existing records.
-        await updatePayrollRecord(editId, {
-          status: formData.status as 'PENDING' | 'PAID' | 'PARTIALLY_PAID',
+        await updateData(`/payroll/${editId}`, {
+          gross_salary: basicSalary,
+          basic_salary: basicSalary,
+          allowances: allowances ? { allowance: allowances } : {},
+          bonuses: bonuses || 0,
+          deductions: deductions ? { deductions: deductions } : {},
+          payroll_period: formData.payPeriod || formData.payrollId || undefined,
+          pay_date: formData.paymentDate || undefined,
+          status: formData.status === 'PAID' ? 'PAID' : 'PENDING',
           payment_reference: formData.paymentReference || undefined,
           signature_approvals: {
             financial_clerk: formData.financialClerkApproval as 'YES' | 'NO',
             manager: formData.managerApproval as 'YES' | 'NO',
           },
-        });
+        }, 'patch');
+        await queryClient.invalidateQueries({ queryKey: ['finance-payroll'] });
+        queryClient.removeQueries({ queryKey: ['finance-payroll'] });
+        await queryClient.invalidateQueries({ queryKey: [`payroll-record-${editId}`] });
+        queryClient.removeQueries({ queryKey: [`payroll-record-${editId}`] });
         toast.success('Payroll updated successfully!');
-        navigate(`/dashboard/payroll/${editId}`);
+        navigate('/dashboard/payroll');
         return;
       }
 
       // Create a new payroll record for the selected payroll run.
       // The backend derives pay period/date from the payroll run, so only core salary fields are sent here.
-      await createPayrollRecord({
-        payroll_id: formData.payrollId,
+      await postData('/payroll', {
+        payroll_period: formData.payrollId,
+        pay_date: formData.paymentDate || undefined,
         employee_id: formData.employeeId,
         gross_salary: basicSalary,
         basic_salary: basicSalary,
@@ -163,10 +186,17 @@ export const AddPayroll = () => {
         deductions: deductions ? { deductions: deductions } : undefined,
       });
 
+      await queryClient.invalidateQueries({ queryKey: ['finance-payroll'] });
+      queryClient.removeQueries({ queryKey: ['finance-payroll'] });
       toast.success('Payroll created successfully!');
       navigate('/dashboard/payroll');
     } catch (error: any) {
-      toast.error(error?.message || 'Failed to save payroll record.');
+      toast.error(
+        error?.response?.data?.message ||
+        error?.response?.data?.details?.[0] ||
+        error?.message ||
+        'Failed to save payroll record.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -193,16 +223,20 @@ export const AddPayroll = () => {
           <Button 
             variant="outline" 
             onClick={handleCancel}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCreatingPayroll || isUpdatingPayroll}
           >
             Cancel
           </Button>
           <Button 
             className="bg-[#3d4094] hover:bg-[#2d3074]"
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCreatingPayroll || isUpdatingPayroll}
           >
-            {isSubmitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Payroll'}
+            {isSubmitting || isCreatingPayroll || isUpdatingPayroll
+              ? 'Saving...'
+              : isEditing
+                ? 'Save Changes'
+                : 'Create Payroll'}
           </Button>
         </div>
       </div>
@@ -441,9 +475,8 @@ export const AddPayroll = () => {
               onChange={handleSelectChange}
               className="mt-2 flex h-9 w-full rounded-sm border border-gray-200 bg-transparent px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary"
             >
-              <option value="PENDING">Pending</option>
-              <option value="PAID">Paid</option>
-              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="UNPAID">UNPAID</option>
+              <option value="PAID">PAID</option>
             </select>
           </div>
         </div>

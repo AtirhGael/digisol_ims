@@ -1,25 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+
 import ReusableTable from '../../../../components/other/ReusableTable/ReusableTable';
 import { createAttendanceColumns } from '../../../../components/Columns/AttendanceColumns';
+import type { AttendanceRecord } from '../types';
 
 interface TodayAttendanceTabProps {
-  data: any[];
+  data: AttendanceRecord[];
+  onViewRecord: (id: string) => void;
 }
 
-export const TodayAttendanceTab: React.FC<TodayAttendanceTabProps> = ({ data }) => {
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = () => setOpenMenuId(null);
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
+export const TodayAttendanceTab: React.FC<TodayAttendanceTabProps> = ({
+  data,
+  onViewRecord,
+}) => {
   const columns = createAttendanceColumns({
-    openMenuId,
-    onToggleMenu: (id) => setOpenMenuId(id),
-    onView: (_id) => {},
-    onDelete: (_id) => {},
+    onView: onViewRecord,
+    showEdit: false,
+    showDelete: false,
   });
 
   return (

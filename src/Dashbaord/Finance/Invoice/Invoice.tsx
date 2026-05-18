@@ -36,6 +36,27 @@ import ChartSkeleton from "../../../components/other/Loader/ChartSkeleton";
 import { toast } from "sonner";
 import useFetchHook from "../../../Hooks/UseFetchHook";
 
+const normalizeInvoiceStatus = (status?: string) =>
+  String(status ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+
+const formatInvoiceStatus = (status?: string) => {
+  const normalizedStatus = normalizeInvoiceStatus(status);
+  const statusLabels: Record<string, string> = {
+    PENDING: "Pending",
+    SENT: "Sent",
+    DRAFT: "Pending",
+    PAID: "Paid",
+    OVERDUE: "Overdue",
+    CANCELLED: "Cancelled",
+    PARTIALLY_PAID: "Partially Paid",
+  };
+
+  return statusLabels[normalizedStatus] || status || "N/A";
+};
+
 // Register chart.js components once.
 ChartJS.register(
   CategoryScale,
@@ -66,6 +87,7 @@ export const Invoice = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
 
   const {
     data: invoicesResponse,
@@ -102,30 +124,36 @@ export const Invoice = () => {
 
     return new Map<string, string>(
       candidates
-        .filter((client: any) => client?.client_id)
+        .filter((client: any) => client?.client_id || client?.id)
         .map((client: any) => [
-          client.client_id,
-          client.client_name || client.name || "Unknown",
+          String(client.client_id ?? client.id),
+          client.client_name || client.name || client.company_name || "Unknown",
         ]),
     );
   }, [clientsData]);
 
-  // Aggregate stats derived from invoices.
-  const invoiceStats = {
-    totalInvoices: 0,
-    pending: 0,
-    partiallyPaid: 0,
-    totalAmount: 0,
-  };
+  const invoiceStats = useMemo(
+    () =>
+      invoices.reduce(
+        (stats, inv) => {
+          const status = normalizeInvoiceStatus(inv.status);
 
-  // Calculate summary stats.
-  invoices.forEach((inv) => {
-    invoiceStats.totalInvoices++;
-    invoiceStats.totalAmount += Number(inv.total_amount);
-    if (["PENDING", "SENT", "DRAFT", "OVERDUE"].includes(inv.status))
-      invoiceStats.pending++;
-    if (inv.status === "PARTIALLY_PAID") invoiceStats.partiallyPaid++;
-  });
+          stats.totalInvoices += 1;
+          stats.totalAmount += Number(inv.total_amount) || 0;
+          if (status === "PENDING" || status === "DRAFT") stats.pending += 1;
+          if (status === "PARTIALLY_PAID") stats.partiallyPaid += 1;
+
+          return stats;
+        },
+        {
+          totalInvoices: 0,
+          pending: 0,
+          partiallyPaid: 0,
+          totalAmount: 0,
+        },
+      ),
+    [invoices],
+  );
 
   const invoiceTrend = useMemo(() => {
     const issuedTotals = new Map<string, number>();
@@ -158,6 +186,19 @@ export const Invoice = () => {
   const hasTrendData =
     invoiceTrend.issuedSeries.some((value) => value > 0) ||
     invoiceTrend.collectedSeries.some((value) => value > 0);
+
+  const invoiceTableData = useMemo(
+    () =>
+      invoices.map((invoice) => {
+        const normalizedStatus = normalizeInvoiceStatus(invoice.status);
+
+        return {
+          ...invoice,
+          display_status: normalizedStatus === "DRAFT" ? "PENDING" : normalizedStatus,
+        };
+      }),
+    [invoices],
+  );
 
   // Chart config for invoice vs collection trend.
   const chartData = {
@@ -220,25 +261,24 @@ export const Invoice = () => {
 
   // Status badge styling helper.
   const getStatusBadge = (status: string) => {
+    const normalizedStatus = normalizeInvoiceStatus(status);
     const statusStyles: Record<string, string> = {
       PENDING: "bg-yellow-100 text-yellow-700",
       SENT: "bg-blue-100 text-blue-700",
+      DRAFT: "bg-yellow-100 text-yellow-700",
       PAID: "bg-green-100 text-green-700",
       OVERDUE: "bg-red-100 text-red-700",
       CANCELLED: "bg-gray-100 text-gray-700",
       PARTIALLY_PAID: "bg-red-100 text-red-700",
-      "Partially Paid": "bg-red-100 text-red-700",
-      Paid: "bg-green-100 text-green-700",
-      Pending: "bg-yellow-100 text-yellow-700",
     };
 
     return (
       <span
         className={`px-3 py-1 rounded-full text-xs font-medium ${
-          statusStyles[status] || "bg-gray-100 text-gray-700"
+          statusStyles[normalizedStatus] || "bg-gray-100 text-gray-700"
         }`}
       >
-        {status}
+        {formatInvoiceStatus(status)}
       </span>
     );
   };
@@ -271,29 +311,27 @@ export const Invoice = () => {
     setOpenMenuId(null);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
-    setInvoices((prev) => prev.filter((inv) => inv.invoice_id !== deleteId));
-    toast.success("Invoice deleted successfully.");
-    setDeleteModalOpen(false);
-    setDeleteId(null);
+    setIsDeletingInvoice(true);
+    try {
+      setInvoices((prev) => prev.filter((inv) => inv.invoice_id !== deleteId));
+      toast.success("Invoice deleted successfully.");
+      setDeleteModalOpen(false);
+      setDeleteId(null);
+    } finally {
+      setIsDeletingInvoice(false);
+    }
   };
 
   const cancelDelete = () => {
+    if (isDeletingInvoice) return;
     setDeleteModalOpen(false);
     setDeleteId(null);
   };
 
   const invoiceColumns = useMemo(
     () => [
-      {
-        key: "invoice_number",
-        header: "Invoice #",
-        render: (value: string) => (
-          <span className="text-blue-600 font-medium">{value}</span>
-        ),
-        truncate: false,
-      },
       {
         key: "client_id",
         header: "Client",
@@ -329,7 +367,7 @@ export const Invoice = () => {
         render: (value: string) => new Date(value).toLocaleDateString("en-GB"),
       },
       {
-        key: "status",
+        key: "display_status",
         header: "Status",
         render: (value: string) => getStatusBadge(value),
         truncate: false,
@@ -393,7 +431,13 @@ export const Invoice = () => {
         truncate: false,
       },
     ],
-    [handleDeleteInvoice, handleEditInvoice, handleViewInvoice, openMenuId],
+    [
+      clientMap,
+      handleDeleteInvoice,
+      handleEditInvoice,
+      handleViewInvoice,
+      openMenuId,
+    ],
   );
 
   // Format values for metric cards.
@@ -496,22 +540,22 @@ export const Invoice = () => {
       <div className="bg-white p-6 rounded-xl ">
         <ReusableTable
           columns={invoiceColumns}
-          data={invoices}
+          data={invoiceTableData}
           heading="Invoices And Payments"
           showToolbar
           showHeading
           showSearch
           showFilter
-          filterKey="status"
+          filterKey="display_status"
           filterOptions={[
-            { key: "status", value: "DRAFT", label: "Draft" },
+            { key: "status", value: "PENDING", label: "Pending" },
             { key: "status", value: "SENT", label: "Sent" },
             { key: "status", value: "PAID", label: "Paid" },
             { key: "status", value: "PARTIALLY_PAID", label: "Partially Paid" },
             { key: "status", value: "OVERDUE", label: "Overdue" },
             { key: "status", value: "CANCELLED", label: "Cancelled" },
           ]}
-          searchKeys={["invoice_number", "client_name", "status"]}
+          searchKeys={["invoice_number", "client_name", "display_status"]}
           itemsPerPage={Math.max(1, invoices.length)}
         />
       </div>
@@ -539,9 +583,10 @@ export const Invoice = () => {
             </button>
             <button
               onClick={confirmDelete}
+              disabled={isDeletingInvoice}
               className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              Delete
+              {isDeletingInvoice ? 'Deleting...' : 'Delete'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

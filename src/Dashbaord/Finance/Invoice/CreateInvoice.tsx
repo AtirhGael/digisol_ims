@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { FaPlus, FaTrash } from 'react-icons/fa';
 import { toast } from 'sonner';
-import { createInvoice, updateInvoice } from '../financeApi';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
 import useFetchHook from '../../../Hooks/UseFetchHook';
+import usePost from '../../../Hooks/UsePostHook';
+import useUpdate from '../../../Hooks/UseUpdateHook';
 
 interface LineItem {
   id: string;
@@ -18,6 +19,82 @@ interface LineItem {
   totalAmount: string;
 }
 
+interface InvoiceClient {
+  client_id: string;
+  client_name: string;
+  email: string;
+  projectId: string;
+  projectName: string;
+  paymentTerms: string;
+}
+
+const asArray = (value: any): any[] => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  if (Array.isArray(value.clients)) return value.clients;
+  if (Array.isArray(value.data)) return value.data;
+  if (Array.isArray(value.items)) return value.items;
+  return [];
+};
+
+const firstString = (...values: any[]): string => {
+  const value = values.find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return value ? value.trim() : '';
+};
+
+const resolveClientEmail = (client: any): string =>
+  firstString(
+    client?.email,
+    client?.client_email,
+    client?.contact_email,
+    client?.primary_email,
+    client?.contact?.email,
+    client?.primary_contact?.email
+  );
+
+const resolveProjectName = (client: any): string => {
+  const project =
+    client?.project ||
+    client?.active_project ||
+    client?.current_project ||
+    client?.latest_project ||
+    client?.projects?.[0] ||
+    client?.client_projects?.[0];
+
+  return firstString(
+    client?.project_name,
+    client?.projectName,
+    client?.project_title,
+    project?.project_name,
+    project?.projectName,
+    project?.name,
+    project?.title,
+    project?.project_id,
+    client?.project_id
+  );
+};
+
+const resolveProjectId = (client: any): string => {
+  const project =
+    client?.project ||
+    client?.active_project ||
+    client?.current_project ||
+    client?.latest_project ||
+    client?.projects?.[0] ||
+    client?.client_projects?.[0];
+
+  return firstString(
+    client?.project_id,
+    client?.projectId,
+    project?.project_id,
+    project?.projectId,
+    project?.id
+  );
+};
+
+const isUuid = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 export const CreateInvoice = () => {
   // Navigation + form state.
   const navigate = useNavigate();
@@ -26,6 +103,8 @@ export const CreateInvoice = () => {
   const editId = routeId ?? searchParams.get('editId');
   const isEditMode = Boolean(editId);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { postData, loading: isCreatingInvoice } = usePost<any>();
+  const { updateData, loading: isUpdatingInvoice } = useUpdate<any>();
   const { data: clientsData, isLoading: isClientsLoading } = useFetchHook(
     '/client-management/clients',
     'clients-data'
@@ -40,36 +119,37 @@ export const CreateInvoice = () => {
     `invoice-edit-${editId}`,
     { enabled: Boolean(editId) }
   );
-
-  const clients = ((): Array<{ client_id: string; client_name: string }> => {
+  const clients = useMemo<InvoiceClient[]>(() => {
     const payload = clientsData?.data ?? clientsData;
-    const candidates = Array.isArray(payload?.clients)
-      ? payload.clients
-      : Array.isArray(payload?.data)
-        ? payload.data
-        : Array.isArray(payload?.items)
-          ? payload.items
-          : Array.isArray(payload)
-            ? payload
-            : [];
+    const candidates = asArray(payload);
 
     return candidates
       .map((client: any) => ({
         client_id: String(client?.client_id ?? client?.id ?? ''),
-        client_name: client?.client_name ?? client?.name ?? '',
+        client_name: client?.client_name ?? client?.name ?? client?.company_name ?? '',
+        email: resolveClientEmail(client),
+        projectId: resolveProjectId(client),
+        projectName: resolveProjectName(client),
+        paymentTerms: firstString(client?.payment_terms, client?.paymentTerms),
       }))
       .filter((client) => client.client_id && client.client_name);
-  })();
-  const clientOptions = clients.map((client) => ({
-    value: client.client_id,
-    label: client.client_name,
-  }));
+  }, [clientsData]);
+
+  const clientOptions = useMemo(
+    () =>
+      clients.map((client) => ({
+        value: client.client_id,
+        label: client.client_name,
+      })),
+    [clients]
+  );
   
   // Invoice form data.
   const [formData, setFormData] = useState({
     clientId: '',
     clientName: '',
     clientEmail: '',
+    projectId: '',
     projectName: '',
     startDate: '',
     paymentTerms: '',
@@ -78,6 +158,21 @@ export const CreateInvoice = () => {
     dueDate: '',
     notes: '',
   });
+
+  const selectedClientId = formData.clientId;
+  const {
+    data: selectedClientResponse,
+    isError: isSelectedClientError,
+  } = useFetchHook<any>(
+    selectedClientId ? `/client-management/clients/${selectedClientId}/details` : '',
+    `invoice-client-details-${selectedClientId}`,
+    { enabled: Boolean(selectedClientId) }
+  );
+
+  const selectedClientDetails = useMemo(() => {
+    const payload = selectedClientResponse?.data ?? selectedClientResponse;
+    return payload?.client ?? payload;
+  }, [selectedClientResponse]);
 
   // Line items start with two rows to match the design.
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -112,7 +207,8 @@ export const CreateInvoice = () => {
       clientId: invoiceResponse.client_id || '',
       clientName: invoiceResponse.client_name || '',
       clientEmail: '',
-      projectName: invoiceResponse.project_id || '',
+      projectId: invoiceResponse.project_id || '',
+      projectName: invoiceResponse.project_name || invoiceResponse.project_id || '',
       startDate: invoiceResponse.invoice_date || '',
       paymentTerms: '',
       stage: '',
@@ -142,6 +238,32 @@ export const CreateInvoice = () => {
           ]
     );
   }, [editId, invoiceResponse, isEditMode, isInvoiceError, invoiceError]);
+
+  useEffect(() => {
+    if (!selectedClientDetails || isSelectedClientError) return;
+
+    const selectedClientName = firstString(
+      selectedClientDetails?.client_name,
+      selectedClientDetails?.name,
+      selectedClientDetails?.company_name
+    );
+    const selectedClientEmail = resolveClientEmail(selectedClientDetails);
+    const selectedProjectId = resolveProjectId(selectedClientDetails);
+    const selectedProjectName = resolveProjectName(selectedClientDetails);
+    const selectedPaymentTerms = firstString(
+      selectedClientDetails?.payment_terms,
+      selectedClientDetails?.paymentTerms
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      clientName: selectedClientName || prev.clientName,
+      clientEmail: selectedClientEmail || prev.clientEmail,
+      projectId: selectedProjectId || prev.projectId,
+      projectName: selectedProjectName || prev.projectName,
+      paymentTerms: selectedPaymentTerms || prev.paymentTerms,
+    }));
+  }, [selectedClientDetails, isSelectedClientError]);
 
   // Handle input/select/textarea changes.
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -234,7 +356,7 @@ export const CreateInvoice = () => {
       }
 
       if (isEditMode && editId) {
-        await updateInvoice(editId, {
+        await updateData(`/finance/invoices/${editId}`, {
           notes: formData.notes || undefined,
           status: formData.status || undefined,
           terms_conditions: undefined,
@@ -246,8 +368,10 @@ export const CreateInvoice = () => {
 
       const payload = {
         client_id: formData.clientId,
+        project_id: isUuid(formData.projectId) ? formData.projectId : undefined,
         invoice_date: formData.startDate,
         due_date: formData.dueDate,
+        status: 'PENDING',
         items: validLineItems.map(item => ({
           description: item.description,
           quantity: parseInt(item.quantity) || 1,
@@ -259,14 +383,9 @@ export const CreateInvoice = () => {
         notes: formData.notes || undefined,
       };
 
-      const response = await createInvoice(payload);
-
-      if (response.success) {
-        toast.success('Invoice created successfully!');
-        navigate('/dashboard/invoice');
-      } else {
-        toast.error(response.message || 'Failed to create invoice');
-      }
+      await postData('/finance/invoices', payload);
+      toast.success('Invoice created successfully!');
+      navigate('/dashboard/invoice');
     } catch (err: any) {
       console.error('Error creating invoice:', err);
       toast.error(err.response?.data?.message || 'Failed to create invoice');
@@ -281,7 +400,7 @@ export const CreateInvoice = () => {
   };
 
   // Show a skeleton while the submission is in flight.
-  if (isSubmitting || isInvoiceLoading || isClientsLoading) {
+  if (isSubmitting || isCreatingInvoice || isUpdatingInvoice || isInvoiceLoading || isClientsLoading) {
     return <SkeletonLoading />
   }
 
@@ -307,114 +426,146 @@ export const CreateInvoice = () => {
         </div>
       </div>
 
-      {/* Client Information */}
-      <div className="bg-white p-6 rounded-xl ">
-        <h3 className="text-base font-semibold mb-4">Client Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="clientName">Client Name</Label>
-            <CustomSelect
-              options={clientOptions}
-              value={formData.clientId}
-              onChange={(value) => {
-                const selected = clients.find((client) => client.client_id === value);
-                setFormData((prev) => ({
-                  ...prev,
-                  clientId: value,
-                  clientName: selected?.client_name || '',
-                }));
-              }}
-              placeholder="Select client"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="clientEmail">Client Email</Label>
-            <Input
-              id="clientEmail"
-              name="clientEmail"
-              type="email"
-              placeholder="client@gmail.com"
-              value={formData.clientEmail}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="projectName">Project Name</Label>
-            <Input
-              id="projectName"
-              name="projectName"
-              placeholder="Enter project name"
-              value={formData.projectName}
-              onChange={handleInputChange}
-            />
+      {isEditMode ? (
+        <div className="bg-white p-6 rounded-xl ">
+          <h3 className="text-base font-semibold mb-4">Client And Project</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Client Name</Label>
+              <div className="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900">
+                {formData.clientName || 'N/A'}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <div className="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900">
+                {formData.projectName || 'N/A'}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Client Information */}
+          <div className="bg-white p-6 rounded-xl ">
+            <h3 className="text-base font-semibold mb-4">Client Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="clientName">Client Name</Label>
+                <CustomSelect
+                  options={clientOptions}
+                  value={formData.clientId}
+                  onChange={(value) => {
+                    const selected = clients.find((client) => client.client_id === value);
+                    setFormData((prev) => ({
+                      ...prev,
+                      clientId: value,
+                      clientName: selected?.client_name || '',
+                      clientEmail: selected?.email || '',
+                      projectId: selected?.projectId || '',
+                      projectName: selected?.projectName || '',
+                      paymentTerms: selected?.paymentTerms || prev.paymentTerms,
+                    }));
+                  }}
+                  placeholder="Select client"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clientEmail">Client Email</Label>
+                <Input
+                  id="clientEmail"
+                  name="clientEmail"
+                  type="email"
+                  placeholder="client@gmail.com"
+                  value={formData.clientEmail}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="projectName">Project Name</Label>
+                <Input
+                  id="projectName"
+                  name="projectName"
+                  placeholder="Enter project name"
+                  value={formData.projectName}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      projectName: e.target.value,
+                      projectId: '',
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
 
-      {/* Invoice Details */}
-      <div className="bg-white p-6 rounded-xl ">
-        <h3 className="text-base font-semibold mb-4">Invoice Details</h3>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="startDate">Start Date</Label>
-            <Input
-              id="startDate"
-              name="startDate"
-              type="date"
-              placeholder="Enter date"
-              value={formData.startDate}
-              onChange={handleInputChange}
-            />
+          {/* Invoice Details */}
+          <div className="bg-white p-6 rounded-xl ">
+            <h3 className="text-base font-semibold mb-4">Invoice Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  name="startDate"
+                  type="date"
+                  placeholder="Enter date"
+                  value={formData.startDate}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="paymentTerms">Payment Terms</Label>
+                <Input
+                  id="paymentTerms"
+                  name="paymentTerms"
+                  placeholder="Enter terms"
+                  value={formData.paymentTerms}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stage">Stage</Label>
+                <CustomSelect
+                  options={[
+                    { value: 'Planning', label: 'Planning' },
+                    { value: 'In Progress', label: 'In Progress' },
+                    { value: 'Completed', label: 'Completed' },
+                  ]}
+                  value={formData.stage}
+                  onChange={(value) => setFormData(prev => ({ ...prev, stage: value }))}
+                  placeholder="Select stage"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <CustomSelect
+                  options={[
+                    { value: 'Pending', label: 'Pending' },
+                    { value: 'Paid', label: 'Paid' },
+                    { value: 'Partially Paid', label: 'Partially Paid' },
+                  ]}
+                  value={formData.status}
+                  onChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+                  placeholder="Select status"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dueDate">Due date</Label>
+                <Input
+                  id="dueDate"
+                  name="dueDate"
+                  type="date"
+                  placeholder="Enter date"
+                  value={formData.dueDate}
+                  onChange={handleInputChange}
+                />
+              </div>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="paymentTerms">Payment Terms</Label>
-            <Input
-              id="paymentTerms"
-              name="paymentTerms"
-              placeholder="Enter terms"
-              value={formData.paymentTerms}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="stage">Stage</Label>
-            <CustomSelect
-              options={[
-                { value: 'Planning', label: 'Planning' },
-                { value: 'In Progress', label: 'In Progress' },
-                { value: 'Completed', label: 'Completed' },
-              ]}
-              value={formData.stage}
-              onChange={(value) => setFormData(prev => ({ ...prev, stage: value }))}
-              placeholder="Select stage"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <CustomSelect
-              options={[
-                { value: 'Pending', label: 'Pending' },
-                { value: 'Paid', label: 'Paid' },
-                { value: 'Partially Paid', label: 'Partially Paid' },
-              ]}
-              value={formData.status}
-              onChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
-              placeholder="Select status"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="dueDate">Due date</Label>
-            <Input
-              id="dueDate"
-              name="dueDate"
-              type="date"
-              placeholder="Enter date"
-              value={formData.dueDate}
-              onChange={handleInputChange}
-            />
-          </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Line Terms */}
       <div className="bg-white p-6 rounded-xl ">

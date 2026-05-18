@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "../../../components/other/Card";
 import { HeadingComponent } from "../../../components/other/HeadingComponent";
 import { Button } from "../../../components/ui/button";
@@ -18,11 +19,13 @@ import { type Expense } from "../financeApi";
 import SkeletonLoading from "../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
 import { toast } from "sonner";
 import useFetchHook from "../../../Hooks/UseFetchHook";
+import useUpdate from "../../../Hooks/UseUpdateHook";
 import { useUserStore } from "../../../Store/UserStore";
 
 export const Expenses = () => {
   // Navigation + UI state.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const roles = useUserStore((s) => s.roles);
   const permissions = useUserStore((s) => s.permissions);
   const isSuperAdmin = roles.includes("SUPER_ADMIN");
@@ -41,6 +44,9 @@ export const Expenses = () => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
+  const [isApprovingExpense, setIsApprovingExpense] = useState(false);
+  const { updateData } = useUpdate<any>();
 
   const {
     data: expensesResponse,
@@ -59,6 +65,19 @@ export const Expenses = () => {
     }
   }, [expensesResponse?.data]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-expense-action-menu="true"]')) return;
+      setOpenMenuId(null);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openMenuId]);
+
   const { data: departmentsData } = useFetchHook(
     "/users/departments",
     "departments",
@@ -72,6 +91,14 @@ export const Expenses = () => {
       ]),
     );
   }, [departmentsData]);
+  const canApproveExpense =
+    roles.includes('SUPER_ADMIN') ||
+    permissions.some(
+      (permission) =>
+        permission.module === 'finance' &&
+        ['expense', 'expenses'].includes(permission.resource_type) &&
+        ['APPROVE', 'UPDATE'].includes(permission.action)
+    );
 
   // Summary stats derived from the current list.
   const stats = {
@@ -138,6 +165,9 @@ export const Expenses = () => {
     navigate(`/dashboard/expenses/add?editId=${expenseId}`);
   };
 
+  const canEditExpense = (status: string) =>
+    !['APPROVED', 'REJECTED', 'PAID'].includes((status || '').toUpperCase());
+
   // Open the delete confirmation dialog.
   const handleDeleteExpense = (expenseId: string) => {
     setDeleteId(expenseId);
@@ -146,7 +176,7 @@ export const Expenses = () => {
   };
 
   // Confirm deletion and update the list.
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     setExpenses((prev) =>
       prev.filter((expense) => expense.expense_id !== deleteId),
@@ -161,20 +191,52 @@ export const Expenses = () => {
     setDeleteId(null);
   };
 
+  const handleApproveExpense = async (expenseId: string) => {
+    setIsApprovingExpense(true);
+    try {
+      await updateData(`/finance/expenses/${expenseId}`, { status: 'APPROVED' }, 'patch');
+      await queryClient.invalidateQueries({ queryKey: ['finance-budgets'] });
+      await queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      queryClient.removeQueries({ queryKey: ['finance-budgets'] });
+      toast.success('Expense approved successfully.');
+      setOpenMenuId(null);
+      await refetch();
+    } catch (approveError: any) {
+      toast.error(approveError?.response?.data?.message || 'Failed to approve expense.');
+    } finally {
+      setIsApprovingExpense(false);
+    }
+  };
+
+  const handleRejectExpense = async (expenseId: string) => {
+    setIsApprovingExpense(true);
+    try {
+      await updateData(`/finance/expenses/${expenseId}`, { status: 'REJECTED' }, 'patch');
+      await queryClient.invalidateQueries({ queryKey: ['finance-budgets'] });
+      await queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      queryClient.removeQueries({ queryKey: ['finance-budgets'] });
+      toast.success('Expense rejected successfully.');
+      setOpenMenuId(null);
+      await refetch();
+    } catch (rejectError: any) {
+      toast.error(rejectError?.response?.data?.message || 'Failed to reject expense.');
+    } finally {
+      setIsApprovingExpense(false);
+    }
+  };
+
   const expenseColumns = useMemo(
     () => [
       {
         key: "title",
         header: "Description",
         render: (_value: string, row: Expense) => (
-          <div>
-            <p className="font-medium text-sm text-gray-900">{row.title}</p>
-            <p className="text-xs text-blue-600">
-              ID: {row.expense_id.substring(0, 8)}
+          <div className="min-w-0">
+            <p className="truncate font-medium text-sm text-gray-900">
+              {row.title || row.description || "Untitled expense"}
             </p>
           </div>
         ),
-        truncate: false,
       },
       {
         key: "department_id",
@@ -188,16 +250,15 @@ export const Expenses = () => {
         key: "employee_name",
         header: "Requestor",
         render: (value: string, row: Expense) => (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-medium">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="w-8 h-8 shrink-0 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-medium">
               {getInitials(value || row.employee_id || "UN")}
             </div>
-            <span className="text-sm text-gray-700">
+            <span className="min-w-0 truncate text-sm text-gray-700">
               {value || row.employee_id || "Unknown"}
             </span>
           </div>
         ),
-        truncate: false,
       },
       {
         key: "created_at",
@@ -228,7 +289,6 @@ export const Expenses = () => {
             {value}
           </span>
         ),
-        truncate: false,
       },
       {
         key: "receipt",
@@ -244,7 +304,10 @@ export const Expenses = () => {
         key: "actions",
         header: "Actions",
         render: (_value: any, row: Expense) => (
-          <div className="relative flex justify-center">
+          <div
+            className="relative flex justify-center"
+            data-expense-action-menu="true"
+          >
             <button
               type="button"
               className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100"
@@ -273,17 +336,41 @@ export const Expenses = () => {
                   <Eye className="w-4 h-4" />
                   View
                 </button>
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  onClick={() => {
-                    setOpenMenuId(null);
-                    handleEditExpense(row.expense_id);
-                  }}
-                >
-                  <Pencil className="w-4 h-4" />
-                  Edit
-                </button>
+                {canEditExpense(row.status) && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    onClick={() => {
+                      setOpenMenuId(null);
+                      handleEditExpense(row.expense_id);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Edit
+                  </button>
+                )}
+                {canApproveExpense && row.status !== 'APPROVED' && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-green-600 hover:bg-gray-50 flex items-center gap-2"
+                    onClick={() => handleApproveExpense(row.expense_id)}
+                    disabled={isApprovingExpense}
+                  >
+                    <FiCheckCircle className="w-4 h-4" />
+                    {isApprovingExpense ? 'Approving...' : 'Approve'}
+                  </button>
+                )}
+                {canApproveExpense && row.status !== 'REJECTED' && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-amber-600 hover:bg-gray-50 flex items-center gap-2"
+                    onClick={() => handleRejectExpense(row.expense_id)}
+                    disabled={isApprovingExpense}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {isApprovingExpense ? 'Updating...' : 'Reject'}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
@@ -425,9 +512,10 @@ export const Expenses = () => {
             </button>
             <button
               onClick={confirmDelete}
+              disabled={isDeletingExpense}
               className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              Delete
+              {isDeletingExpense ? 'Deleting...' : 'Delete'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

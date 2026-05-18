@@ -8,7 +8,9 @@ const CompensationTab: React.FC = () => {
     // Step 3: Compensation & Benefits
     baseSalary: '',
     paymentFrequency: 'Monthly',
-    bankName: '',
+    commission: '',
+    paymentMethod: 'bank_account',
+    phoneNumber: '',
     bankAccountNumber: '',
     taxIdNumber: '',
     benefits: [] as string[],
@@ -57,45 +59,77 @@ const CompensationTab: React.FC = () => {
             <option value="Monthly">Monthly</option>
             <option value="Biweekly">Biweekly</option>
             <option value="Weekly">Weekly</option>
+            <option value="Commission">Commission</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
-            Bank Name<span className="text-red-500">*</span>
+            Commission (XAF)
           </label>
           <input
-            type="text"
-            value={formData.bankName}
-            onChange={(e) => handleInputChange("bankName", e.target.value)}
+            type="number"
+            value={formData.commission}
+            onChange={(e) => handleInputChange("commission", e.target.value)}
+            placeholder="Enter commission amount"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
           />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
-            Bank Account Number<span className="text-red-500">*</span>
+            Payment Method<span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            value={formData.bankAccountNumber}
-            onChange={(e) =>
-              handleInputChange("bankAccountNumber", e.target.value)
-            }
+          <select
+            value={formData.paymentMethod}
+            onChange={(e) => handleInputChange("paymentMethod", e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+          >
+            <option value="mobile_money">Mobile Money</option>
+            <option value="cash">Cash</option>
+            <option value="bank_account">Bank Account</option>
+            <option value="orange_money">Orange Money</option>
+          </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">
-            Tax ID Number
-          </label>
-          <input
-            type="text"
-            value={formData.taxIdNumber}
-            onChange={(e) => handleInputChange("taxIdNumber", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+        {(formData.paymentMethod === "mobile_money" || formData.paymentMethod === "orange_money") && (
+          <div>
+            <label className="block text-sm font-medium text-gray-900 mb-2">
+              Phone Number<span className="text-red-500">*</span>
+            </label>
+            <input
+              type="tel"
+              value={formData.phoneNumber}
+              onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+        )}
+        {formData.paymentMethod === "bank_account" && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                Bank Account Number<span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.bankAccountNumber}
+                onChange={(e) => handleInputChange("bankAccountNumber", e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                Tax ID Number
+              </label>
+              <input
+                type="text"
+                value={formData.taxIdNumber}
+                onChange={(e) => handleInputChange("taxIdNumber", e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">

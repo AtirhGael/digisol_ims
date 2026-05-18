@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "../../../components/other/Card";
 import { AiFillInteraction } from "react-icons/ai";
 import { IoCallSharp } from "react-icons/io5";
@@ -9,8 +9,7 @@ import { useNavigate } from "react-router-dom";
 import useFetchHook from "../../../Hooks/UseFetchHook";
 import { Error as ErrorMessage } from "../../../components/other/Error/Error";
 import SkeletonLoading from "@/components/other/Loader/SkeletonLoading/SkeletonLoading";
-import TableSkeleton from "@/components/other/Loader/TableSkeleton";
-import { getAllContracts } from "../ProposalContracts/Contracts/api";
+
 import { formatDate } from "../ProposalContracts/utils/dateTime";
 import ReusableTable from "../../../components/other/ReusableTable/ReusableTable";
 import { MoreVertical, Eye, Trash2 } from "lucide-react";
@@ -31,10 +30,6 @@ import { Button } from "../../../components/ui/button";
 export const Clients = () => {
   // Local UI state.
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [contractSummary, setContractSummary] = useState<
-    Record<string, { count: number; lastDate?: string; totalValue: number }>
-  >({});
-  const [isContractSummaryLoading, setIsContractSummaryLoading] = useState(true);
   const navigate = useNavigate();
   const accessToken = useUserStore((state) => state.accessToken);
   const API_BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:4000";
@@ -43,119 +38,28 @@ export const Clients = () => {
   const { data, error, isError, isLoading, refetch } = useFetchHook(
     "/client-management/stats",
     "clients",
+    { staleTime: 120_000 },
   );
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteClientTarget, setDeleteClientTarget] = useState<any>(null);
 
-  // Fetch all contracts once and build a summary lookup per client.
-  useEffect(() => {
-    let isMounted = true;
-    const loadContracts = async () => {
-      try {
-        setIsContractSummaryLoading(true);
-        const response = await getAllContracts();
-        const responseAny = response as any;
-        const contracts = Array.isArray(responseAny?.data)
-          ? responseAny.data
-          : Array.isArray(responseAny?.data?.data)
-          ? responseAny.data.data
-          : [];
-
-        const summary: Record<string, { count: number; lastDate?: string; totalValue: number }> = {};
-        contracts.forEach((contract: any) => {
-          const clientId =
-            contract?.client_id ||
-            contract?.clients?.client_id ||
-            contract?.clients?.id ||
-            contract?.clients?.clientId;
-          if (!clientId) return;
-          const key = String(clientId);
-
-          const contractDate =
-            contract?.signed_date ||
-            contract?.start_date ||
-            contract?.created_at ||
-            contract?.updated_at;
-          if (!summary[key]) {
-            summary[key] = { count: 0, lastDate: contractDate, totalValue: 0 };
-          }
-          summary[key].count += 1;
-          const rawValue =
-            contract?.contract_value ??
-            contract?.contractValue ??
-            contract?.value ??
-            0;
-          const numericValue =
-            typeof rawValue === "number" ? rawValue : parseFloat(rawValue);
-          if (!Number.isNaN(numericValue)) {
-            summary[key].totalValue += numericValue;
-          }
-          if (contractDate) {
-            const current = summary[key].lastDate ? new Date(summary[key].lastDate).getTime() : 0;
-            const next = new Date(contractDate).getTime();
-            if (!Number.isNaN(next) && next >= current) {
-              summary[key].lastDate = contractDate;
-            }
-          }
-        });
-
-        if (isMounted) {
-          setContractSummary(summary);
-          setIsContractSummaryLoading(false);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setContractSummary({});
-          setIsContractSummaryLoading(false);
-        }
-      }
-    };
-
-    loadContracts();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
 
   // Helpers to normalize client data for display.
-  const resolveClientKey = (client: any) =>
-    String(client?.id ?? client?.client_id ?? client?.clientId ?? client?.client_code ?? "");
-
-  const resolveContractsCount = (client: any) => {
-    const key = resolveClientKey(client);
-    if (key && contractSummary[key]) return contractSummary[key].count;
-    const fallback =
-      client?.total_contracts ?? client?.contractsCount ?? client?.contracts_count ?? null;
-    if (fallback !== null && fallback !== undefined) return fallback;
-    return isContractSummaryLoading ? null : 0;
-  };
+  const resolveContractsCount = (client: any) =>
+    client?.contracts_count ?? client?.total_contracts ?? client?.contractsCount ?? 0;
 
   const resolveLastContract = (client: any) => {
-    const key = resolveClientKey(client);
-    const raw =
-      (key && contractSummary[key]?.lastDate) ||
-      client?.last_contract_date ||
-      client?.lastContractDate ||
-      client?.lastContactDate ||
-      null;
-    if (!raw && isContractSummaryLoading) return null;
+    const raw = client?.last_contract_date || client?.lastContractDate || client?.lastContactDate || null;
     return formatDate(raw, "N/A");
   };
 
   const resolveTotalValue = (client: any) => {
-    const key = resolveClientKey(client);
-    const summaryValue = key ? contractSummary[key]?.totalValue : undefined;
-    if (typeof summaryValue === "number" && !Number.isNaN(summaryValue)) {
-      return summaryValue;
+    const raw = client?.total_contract_value ?? client?.totalContractValue ?? client?.total_value ?? client?.value;
+    if (raw !== undefined && raw !== null && raw !== "") {
+      const num = typeof raw === "number" ? raw : parseFloat(raw);
+      return Number.isNaN(num) ? 0 : num;
     }
-    const fallback =
-      client?.total_contract_value ??
-      client?.totalContractValue ??
-      client?.total_value ??
-      client?.value;
-    if (fallback !== undefined && fallback !== null && fallback !== "") return fallback;
-    return isContractSummaryLoading ? null : 0;
+    return 0;
   };
 
   const formatValue = (rawValue: any) => {
@@ -215,7 +119,7 @@ export const Clients = () => {
         status: client.status || "Active",
       };
     });
-  }, [filteredClients, resolveContractsCount, resolveLastContract, resolveTotalValue, isContractSummaryLoading]);
+  }, [filteredClients]);
 
   // Column definitions for the table view.
   const clientColumns = useMemo(
@@ -465,9 +369,7 @@ export const Clients = () => {
 
       {/* Clients table */}
       <div className="mt-5 animate-in fade-in duration-500">
-        {isContractSummaryLoading ? (
-          <TableSkeleton rows={7} columns={6} showHeader={true} showSearch={false} showFilters={false} />
-        ) : filteredClients.length > 0 ? (
+        {filteredClients.length > 0 ? (
           <div
             className="bg-white rounded-lg shadow-sm overflow-hidden"
             onClick={() => setOpenMenuId(null)}

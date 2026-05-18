@@ -5,10 +5,7 @@ import {
   UserCog,
   User,
   ShieldCheck,
-  MoreVertical,
-  Eye,
-  Pencil,
-  Trash2,
+  UserX,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/other/Card";
@@ -19,9 +16,10 @@ import { EditUserForm } from "./EditUserForm";
 import { UserDetails } from "./UserDetails";
 import { useFetchHook } from "../../Hooks/UseFetchHook";
 import { useDeleteHook } from "../../Hooks/UseDeleteHook";
+import { useUpdate } from "../../Hooks/UseUpdateHook";
 import Skeleton from "../../components/other/Loader/Skeleton";
 import SkeletonLoading from "../../components/other/Loader/SkeletonLoading/SkeletonLoading";
-import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { UserActionConfirmModal } from "./UserActionConfirmModal";
 import { toast } from "sonner";
 import { useUserStore } from "../../Store/UserStore";
 
@@ -63,6 +61,8 @@ export const Users = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProps | null>(null);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [userToDeactivate, setUserToDeactivate] = useState<UserProps | null>(null);
   const loggedInUserId = useUserStore((s) => s.user?.id);
   const roles = useUserStore((s) => s.roles);
   const permissions = useUserStore((s) => s.permissions);
@@ -91,6 +91,9 @@ export const Users = () => {
     "/users",
     ["users"],
   );
+
+  // Deactivate mutation
+  const { loading: deactivating, updateData: deactivateUser } = useUpdate();
 
   const users = usersResponse?.data?.users || [];
   const pagination = usersResponse?.data?.pagination;
@@ -125,22 +128,50 @@ export const Users = () => {
     if (!userToDelete) return;
 
     try {
-      console.log("Deleting user:", userToDelete.user_id);
-      const result = await deleteUser(`/${userToDelete.user_id}`);
-      console.log("Delete result:", result);
-      toast.success("User deactivated successfully");
+      await deleteUser(`/${userToDelete.user_id}`);
+      toast.success("User permanently deleted");
       setShowDeleteModal(false);
       setUserToDelete(null);
       refetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Delete error:", error);
-      toast.error("Error deleting user");
+      const message = error?.response?.data?.message || "Error deleting user";
+      toast.error(message);
     }
   };
 
   const cancelDelete = () => {
     setShowDeleteModal(false);
     setUserToDelete(null);
+  };
+
+  const handleDeactivateUser = async (userId: string) => {
+    const user = users.find((u: UserProps) => u.user_id === userId);
+    if (!user) return;
+
+    setUserToDeactivate(user);
+    setShowDeactivateModal(true);
+  };
+
+  const confirmDeactivate = async () => {
+    if (!userToDeactivate) return;
+
+    try {
+      await deactivateUser(`/users/${userToDeactivate.user_id}/deactivate`, {}, 'put');
+      toast.success("User deactivated successfully");
+      setShowDeactivateModal(false);
+      setUserToDeactivate(null);
+      refetchUsers();
+    } catch (error: any) {
+      console.error("Deactivate error:", error);
+      const message = error?.response?.data?.message || "Error deactivating user";
+      toast.error(message);
+    }
+  };
+
+  const cancelDeactivate = () => {
+    setShowDeactivateModal(false);
+    setUserToDeactivate(null);
   };
 
   const handleNewUser = () => {
@@ -290,6 +321,7 @@ export const Users = () => {
             columns={createUsersColumns({
               onViewUser: handleViewUser,
               onEditUser: handleEditUser,
+              onDeactivateUser: handleDeactivateUser,
               onDeleteUser: handleDeleteUser,
             })}
             searchKeys={["name", "email", "role", "department"]}
@@ -317,10 +349,21 @@ export const Users = () => {
         <UserDetails userId={selectedUserId} onBack={handleBack} />
       )}
 
+      {/* Deactivate Confirmation Modal */}
+      <UserActionConfirmModal
+        isOpen={showDeactivateModal}
+        user={userToDeactivate}
+        actionType="deactivate"
+        onConfirm={confirmDeactivate}
+        onCancel={cancelDeactivate}
+        isLoading={deactivating}
+      />
+
       {/* Delete Confirmation Modal */}
-      <DeleteConfirmModal
+      <UserActionConfirmModal
         isOpen={showDeleteModal}
         user={userToDelete}
+        actionType="delete"
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
         isLoading={deleting}

@@ -1,60 +1,52 @@
 import { Route, Routes, Navigate, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, useEffect } from "react";
 import { useUserStore } from "./Store/UserStore";
 import { setNavigate } from "./utils/navigationService";
 import { Login } from "./Authentication/Login/Login";
 import { ResetPassword } from "./Authentication/RestPassword/ResetPassword";
 import { Otp } from "./Authentication/Otp/Otp";
 import { NewPassword } from "./Authentication/NewPassword/NewPassword";
-import { MainDashboard } from "./Dashbaord/MainDashboard/MainDashboard";
 import { Layout } from "./components/Menu/Layout";
-import { HumanResourceDashboard } from "./Dashbaord/HumanResource/Dashboard/HumanResourceDashboard";
-import { Employees } from "./Dashbaord/HumanResource/Employees/Employees";
-import Departments from "./Dashbaord/HumanResource/Departments/Departments";
-import { Onboarding } from "./Dashbaord/HumanResource/Onboarding/Onboarding";
-import { LeaveManagement } from "./Dashbaord/HumanResource/Leave Management/Leavemanagement";
-import { Attendance } from "./Dashbaord/HumanResource/Attendance/Attendance";
-import { Performance } from "./Dashbaord/HumanResource/Performance/Performance";
-import Queries from "./Dashbaord/HumanResource/Queries/Queries";
-import { HumanResourceReports } from "./Dashbaord/HumanResource/Reports/HumanResourceReports";
-import { Tasks } from "./Dashbaord/HumanResource/Tasks/Tasks";
+import { hrRoutes } from "./Dashbaord/HumanResource/hrRoutes";
 import { financeRoutes } from "./Dashbaord/Finance/financeRoutes";
-import { Users } from "./Dashbaord/Users/Users";
-import { RoleManagement } from "./Dashbaord/role managment/roleManagment";
-import { Projects } from "./Dashbaord/Projects/Projects";
-import { Documents } from "./Dashbaord/Documents/Documents";
-import { DevelopmentDashboard } from "./Dashbaord/Development/Dashboard/DevelopmentDashboard";
-import { DevelopmentTask } from "./Dashbaord/Development/Tasks/DevelopmentTask";
-import { Construction } from "./Dashbaord/Facilities/Constructions/Construction";
-import { Power } from "./Dashbaord/Facilities/Power/Power";
 import { NotFound } from "./components/NotFound/NotFound";
-import { Inventory } from "./Dashbaord/Facilities/Inventory/Inventory";
-import { Settings } from "./Dashbaord/Settings/Settings";
-import { Notification } from "./Dashbaord/Notification/Notification";
-import { Messages } from "./Dashbaord/Message/Messages";
-import GeneralTasks from "./Dashbaord/Tasks/GeneralTasks.js";
 import { PayrollProvider } from "./Store/PayrollStore";
-import { BusinessDevelopmentDashboard } from "./Dashbaord/BusinessDevelopment/Dashboard/BusinessDevelopmentDashboard.js";
-import { ProspectionPlanning } from "./Dashbaord/BusinessDevelopment/ProspectPlanning/ProspectionPlanning.js";
-import { AddProspectionWrapper } from "./Dashbaord/BusinessDevelopment/ProspectPlanning/AddProspectionWrapper.tsx";
-import { EditProspectionWrapper } from "./Dashbaord/BusinessDevelopment/ProspectPlanning/EditProspectionWrapper.tsx";
-import ContactsLeads from "./Dashbaord/BusinessDevelopment/ContactLeads/ContactsLeads.js";
-import { Clients } from "./Dashbaord/BusinessDevelopment/Clients/Clients.js";
-import { ProposalsContracts } from "./Dashbaord/BusinessDevelopment/ProposalContracts/ProposalsContracts.js";
-import ViewLeads from "./Dashbaord/BusinessDevelopment/ContactLeads/ViewLeadsDetails/ViewLeads.js";
-import { ClientDetailsPage } from "./Dashbaord/BusinessDevelopment/Clients/ClientDetailsPage.js";
-import RecordClientInteraction from "./Dashbaord/BusinessDevelopment/Clients/RecordClientInteraction/RecordClientInteraction";
-import DepartmentDetails from "./Dashbaord/HumanResource/Departments/DepartmentDetails";
-import ViewProspection from "./Dashbaord/BusinessDevelopment/ProspectPlanning/ViewProspection";
 import { Authenticate } from "./Hooks/UseAuthenticate.tsx";
 import { Loader } from "./components/other/Loader/Loader.tsx";
-import RecordNewTransaction from "./Dashbaord/BusinessDevelopment/ContactLeads/RecordNewTransaction/RecordNewTransaction";
 import { ProtectedRoute } from "./components/ProtectedRoute/ProtectedRoute";
-import { Unauthorized } from "./Dashbaord/Unauthorized/Unauthorized";
-import EditRole from "./Dashbaord/role managment/EditRole";
-import ViewRole from "./Dashbaord/role managment/ViewRole";
-import CreateRole from "./Dashbaord/role managment/CreateRole";
-import { AuditLogs } from "./Dashbaord/AuditLogs/AuditLogs";
+
+// ── Lazy-loaded page components (code-split per route) ──────────────
+const MainDashboard = lazy(() => import("./Dashbaord/MainDashboard/MainDashboard").then(m => ({ default: m.MainDashboard })));
+const Unauthorized = lazy(() => import("./Dashbaord/Unauthorized/Unauthorized").then(m => ({ default: m.Unauthorized })));
+const Users = lazy(() => import("./Dashbaord/Users/Users").then(m => ({ default: m.Users })));
+const RoleManagement = lazy(() => import("./Dashbaord/role managment/roleManagment").then(m => ({ default: m.RoleManagement })));
+const CreateRole = lazy(() => import("./Dashbaord/role managment/CreateRole"));
+const EditRole = lazy(() => import("./Dashbaord/role managment/EditRole"));
+const ViewRole = lazy(() => import("./Dashbaord/role managment/ViewRole"));
+const AuditLogs = lazy(() => import("./Dashbaord/AuditLogs/AuditLogs").then(m => ({ default: m.AuditLogs })));
+const Projects = lazy(() => import("./Dashbaord/Projects/Projects").then(m => ({ default: m.Projects })));
+const Documents = lazy(() => import("./Dashbaord/Documents/Documents").then(m => ({ default: m.Documents })));
+const DevelopmentDashboard = lazy(() => import("./Dashbaord/Development/Dashboard/DevelopmentDashboard").then(m => ({ default: m.DevelopmentDashboard })));
+const DevelopmentTask = lazy(() => import("./Dashbaord/Development/Tasks/DevelopmentTask").then(m => ({ default: m.DevelopmentTask })));
+const Construction = lazy(() => import("./Dashbaord/Facilities/Constructions/Construction").then(m => ({ default: m.Construction })));
+const Power = lazy(() => import("./Dashbaord/Facilities/Power/Power").then(m => ({ default: m.Power })));
+const Inventory = lazy(() => import("./Dashbaord/Facilities/Inventory/Inventory").then(m => ({ default: m.Inventory })));
+const Settings = lazy(() => import("./Dashbaord/Settings/Settings").then(m => ({ default: m.Settings })));
+const Notification = lazy(() => import("./Dashbaord/Notification/Notification").then(m => ({ default: m.Notification })));
+const Messages = lazy(() => import("./Dashbaord/Message/Messages").then(m => ({ default: m.Messages })));
+const GeneralTasks = lazy(() => import("./Dashbaord/Tasks/GeneralTasks.js"));
+const BusinessDevelopmentDashboard = lazy(() => import("./Dashbaord/BusinessDevelopment/Dashboard/BusinessDevelopmentDashboard.js").then(m => ({ default: m.BusinessDevelopmentDashboard })));
+const ProspectionPlanning = lazy(() => import("./Dashbaord/BusinessDevelopment/ProspectPlanning/ProspectionPlanning.js").then(m => ({ default: m.ProspectionPlanning })));
+const AddProspectionWrapper = lazy(() => import("./Dashbaord/BusinessDevelopment/ProspectPlanning/AddProspectionWrapper.tsx").then(m => ({ default: m.AddProspectionWrapper })));
+const EditProspectionWrapper = lazy(() => import("./Dashbaord/BusinessDevelopment/ProspectPlanning/EditProspectionWrapper.tsx").then(m => ({ default: m.EditProspectionWrapper })));
+const ContactsLeads = lazy(() => import("./Dashbaord/BusinessDevelopment/ContactLeads/ContactsLeads.js"));
+const Clients = lazy(() => import("./Dashbaord/BusinessDevelopment/Clients/Clients.js").then(m => ({ default: m.Clients })));
+const ProposalsContracts = lazy(() => import("./Dashbaord/BusinessDevelopment/ProposalContracts/ProposalsContracts.js").then(m => ({ default: m.ProposalsContracts })));
+const ViewLeads = lazy(() => import("./Dashbaord/BusinessDevelopment/ContactLeads/ViewLeadsDetails/ViewLeads.js"));
+const ClientDetailsPage = lazy(() => import("./Dashbaord/BusinessDevelopment/Clients/ClientDetailsPage.js").then(m => ({ default: m.ClientDetailsPage })));
+const RecordClientInteraction = lazy(() => import("./Dashbaord/BusinessDevelopment/Clients/RecordClientInteraction/RecordClientInteraction"));
+const ViewProspection = lazy(() => import("./Dashbaord/BusinessDevelopment/ProspectPlanning/ViewProspection"));
+const RecordNewTransaction = lazy(() => import("./Dashbaord/BusinessDevelopment/ContactLeads/RecordNewTransaction/RecordNewTransaction"));
 
 function App() {
   const navigate = useNavigate();
@@ -120,161 +112,18 @@ function App() {
           <Route path="" index element={<MainDashboard />} />
           {/* Unauthorized access page */}
           <Route path="unauthorized" element={<Unauthorized />} />
-          {/* Human resource routes */}
-          <Route
-            path="humanresource"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "employee",
-                  action: "READ",
-                }}
-              >
-                <HumanResourceDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="employees"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "employee",
-                  action: "READ",
-                }}
-              >
-                <Employees />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="departments"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "employee",
-                  action: "READ",
-                }}
-              >
-                <Departments />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="departments/:id"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "employee",
-                  action: "READ",
-                }}
-              >
-                <DepartmentDetails />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="onboarding"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "onboarding",
-                  action: "READ",
-                }}
-              >
-                <Onboarding />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="leavemanagement"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "leave_management",
-                  action: "READ",
-                }}
-              >
-                <LeaveManagement />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="attendance"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "attendance",
-                  action: "READ",
-                }}
-              >
-                <Attendance />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="performance"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "performance",
-                  action: "READ",
-                }}
-              >
-                <Performance />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="queries"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "queries",
-                  action: "READ",
-                }}
-              >
-                <Queries />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="reports"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "reports",
-                  action: "READ",
-                }}
-              >
-                <HumanResourceReports />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="tasks"
-            element={
-              <ProtectedRoute
-                requiredPermission={{
-                  module: "hr",
-                  resource: "tasks",
-                  action: "READ",
-                }}
-              >
-                <Tasks />
-              </ProtectedRoute>
-            }
-          />
+          {/* HR routes are centralized in one file for simple maintenance. */}
+          {hrRoutes.map((route) => (
+            <Route
+              key={route.path}
+              path={route.path}
+              element={
+                <ProtectedRoute requiredPermission={route.permission}>
+                  {route.element}
+                </ProtectedRoute>
+              }
+            />
+          ))}
 
           {/* ******** finance routes ********* */}
           {/* Each finance route is protected by its own resource permission so

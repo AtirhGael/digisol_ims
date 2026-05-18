@@ -3,6 +3,7 @@ import type { ExpenseLine, TeamMember } from '../../../../Types/Types';
 import { inputClass } from './uiConstants';
 import { BUDGET_TYPES } from '../../../../data/prospectionData';
 import { CustomSelect } from '../../../../components/ui/CustomSelect';
+import useFetchHook from '../../../../Hooks/UseFetchHook';
 
 interface StepBudgetTeamProps {
   expenses: ExpenseLine[];
@@ -17,15 +18,26 @@ interface StepBudgetTeamProps {
   onNext: () => void;
 }
 
-const DEPARTMENTS = [
+type Department = {
+  department_id: string;
+  department_name: string;
+}
+
+type DepartmentListResponse = {
+  data?: Department[];
+  departments?: Department[];
+}
+
+const FALLBACK_DEPARTMENTS = [
   'Administration',
   'Business Developments',
-  'Construction and Solar energy',
+  'Construction',
+  'Solar Energy',
   'Development department',
   'Facility Management',
   'Finance',
   'Human Resource',
-  'Managed and Processed Services',
+  'Manage and Professional Services',
   'Project Management'
 ];
 
@@ -41,10 +53,24 @@ export function StepBudgetTeam({
   onBack,
   onNext,
 }: StepBudgetTeamProps) {
-  const departmentOptions = DEPARTMENTS.map(dept => ({
-    value: dept,
-    label: dept
-  }));
+  const { data: departmentsResponse } = useFetchHook<DepartmentListResponse | Department[]>(
+    '/users/departments',
+    'prospection-team-departments'
+  );
+
+  const departments = Array.isArray(departmentsResponse)
+    ? departmentsResponse
+    : departmentsResponse?.data || departmentsResponse?.departments || [];
+
+  const departmentOptions = departments.length
+    ? departments.map((dept) => ({
+        value: dept.department_name,
+        label: dept.department_name,
+      }))
+    : FALLBACK_DEPARTMENTS.map(dept => ({
+        value: dept,
+        label: dept
+      }));
   const total = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
   return (
@@ -82,7 +108,7 @@ export function StepBudgetTeam({
               <div className="sm:col-span-1">
                 <label className="sm:hidden text-xs font-medium text-gray-500 mb-1 block pl-2">Description</label>
                 <textarea
-                  className={`${inputClass} w-full resize-none min-h-[60px] sm:min-h-[40px] pl-2`}
+                  className={`${inputClass} w-full resize-none min-h-15 sm:min-h-10 pl-2`}
                   placeholder="Enter description..."
                   value={expense.description}
                   onChange={(e) => onExpenseChange(expense.id, "description", e.target.value)}

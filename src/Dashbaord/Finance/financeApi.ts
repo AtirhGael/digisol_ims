@@ -63,8 +63,10 @@ export interface Transaction {
   description: string;
   reference_number?: string;
   payment_method?: string;
+  supporting_doc_url?: string;
   status: string;
   current_balance?: number;
+  created_at?: string;
 }
 
 export interface Invoice {
@@ -94,8 +96,11 @@ export interface Expense {
   currency: string;
   description: string;
   justification?: string;
+  receipt_url?: string;
+  document_url?: string;
   status: string;
   created_at: string;
+  expense_date?: string | null;
   approved_amount?: number;
 }
 
@@ -298,6 +303,16 @@ export const getTransactionById = async (
   return response.data;
 };
 
+export const updateTransactionStatus = async (
+  transactionId: string,
+  status: "RECORDED" | "VERIFIED" | "POSTED",
+): Promise<Transaction> => {
+  const response = await apiClient.put(`/finance/transactions/${transactionId}`, {
+    status,
+  });
+  return response.data?.transaction;
+};
+
 export const voidTransaction = async (
   transactionId: string,
   reason: string,
@@ -428,7 +443,7 @@ export const getExpenseById = async (expenseId: string): Promise<Expense> => {
 
 export const createExpense = async (data: {
   title: string;
-  employee_id: string;
+  employee_id?: string;
   amount: number;
   description: string;
   department_id: string;
@@ -437,11 +452,37 @@ export const createExpense = async (data: {
   procurement_id?: string;
   project_id?: string;
   prospection_id?: string;
+  expense_date?: string;
+  receipt_url?: string;
 }): Promise<{ success: boolean; message: string; data: Expense }> => {
   const response = await apiClient.post("/finance/expenses", data);
   return {
     success: true,
     message: "Expense submitted successfully.",
+    data: response.data,
+  };
+};
+
+export const updateExpense = async (
+  expenseId: string,
+  data: {
+    title?: string;
+    amount?: number;
+    currency?: string;
+    description?: string;
+    justification?: string;
+    department_id?: string;
+    procurement_id?: string | null;
+    project_id?: string | null;
+    prospection_id?: string | null;
+    expense_date?: string;
+    receipt_url?: string | null;
+  },
+): Promise<{ success: boolean; message: string; data: Expense }> => {
+  const response = await apiClient.put(`/finance/expenses/${expenseId}`, data);
+  return {
+    success: true,
+    message: "Expense updated successfully.",
     data: response.data,
   };
 };

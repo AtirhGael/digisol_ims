@@ -1,12 +1,11 @@
-import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
-import { FaFileInvoice, FaArrowLeft } from 'react-icons/fa6';
+import { FaFileInvoice, FaArrowLeft, FaDownload } from 'react-icons/fa6';
 import { type Transaction } from '../financeApi';
 import useFetchHook from '../../../Hooks/UseFetchHook';
+import { getDocumentDisplayName, getDocumentPublicUrl } from '../../BusinessDevelopment/ProposalContracts/utils/document';
 
 interface TransactionDetail {
-  id: string;
   amount: string;
   category: string;
   type: 'Expense' | 'Income';
@@ -16,6 +15,7 @@ interface TransactionDetail {
   attachments: Array<{
     name: string;
     date: string;
+    url: string;
   }>;
 }
 
@@ -53,27 +53,48 @@ export const TransactionDetails = () => {
     );
   }
 
-  // Mock data - replace with API data when available.
-  const resolvedTransaction = useMemo<TransactionDetail>(() => ({
-    id: transaction.transaction_number || transaction.transaction_id,
+  const attachmentUrl = transaction.supporting_doc_url || '';
+
+  const resolvedTransaction = ({
     amount: `${transaction.currency || 'XAF'} ${Number(transaction.amount).toLocaleString()}`,
     category: transaction.category || 'N/A',
     type: transaction.transaction_type,
     date: new Date(transaction.transaction_date).toLocaleDateString('en-GB'),
     description: transaction.description || 'N/A',
     status: ['POSTED', 'COMPLETED'].includes(transaction.status) ? 'Completed' : 'Pending',
-    attachments: [],
-  }), [transaction]);
+    attachments: attachmentUrl
+      ? [{
+          name: getDocumentDisplayName(attachmentUrl, 'Transaction attachment'),
+          date: transaction.created_at
+            ? new Date(transaction.created_at).toLocaleDateString('en-GB')
+            : new Date(transaction.transaction_date).toLocaleDateString('en-GB'),
+          url: getDocumentPublicUrl(attachmentUrl),
+        }]
+      : [],
+  } satisfies TransactionDetail);
 
   // Back to transactions list.
   const handleBack = () => {
     navigate('/dashboard/transactions');
   };
 
+  const handleDownloadPdf = () => {
+    window.print();
+  };
+
   return (
     <div>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .transaction-print-area, .transaction-print-area * { visibility: visible !important; }
+          .transaction-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+          .no-print { display: none !important; }
+          body { background: #ffffff !important; }
+        }
+      `}</style>
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 no-print">
         <button
           onClick={handleBack}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4 transition"
@@ -81,21 +102,28 @@ export const TransactionDetails = () => {
           <FaArrowLeft />
           <span>Back to Transactions</span>
         </button>
-        <h1 className="text-2xl font-semibold text-gray-800">Transactions Details</h1>
-        <p className="text-sm text-gray-500">Manage and record transactions to keep track of spendings</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-800">Transactions Details</h1>
+            <p className="text-sm text-gray-500">Manage and record transactions to keep track of spendings</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+          >
+            <FaDownload />
+            Download PDF
+          </button>
+        </div>
       </div>
 
       {/* Transaction Details Card */}
-      <div className="bg-white rounded-lg  p-6">
+      <div className="transaction-print-area bg-white rounded-lg p-6">
         <h2 className="text-lg font-semibold mb-6">Transaction Details</h2>
 
         {/* Details Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-2">Transaction ID</label>
-            <p className="text-base font-semibold text-gray-800">{resolvedTransaction.id}</p>
-          </div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Amount</label>
             <p className="text-base font-semibold text-gray-800">{resolvedTransaction.amount}</p>
@@ -148,9 +176,13 @@ export const TransactionDetails = () => {
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-2">Attachments</label>
             <div className="space-y-2">
-              {resolvedTransaction.attachments.map((attachment, index) => (
-                <div
-                  key={index}
+              {resolvedTransaction.attachments.length ? (
+                resolvedTransaction.attachments.map((attachment, index) => (
+                <a
+                  key={`${attachment.url}-${index}`}
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer"
                 >
                   <FaFileInvoice className="text-gray-500 text-xl" />
@@ -158,8 +190,11 @@ export const TransactionDetails = () => {
                     <p className="text-sm font-medium text-gray-800">{attachment.name}</p>
                     <p className="text-xs text-gray-500">{attachment.date}</p>
                   </div>
-                </div>
-              ))}
+                </a>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">No attachment uploaded</p>
+              )}
             </div>
           </div>
         </div>

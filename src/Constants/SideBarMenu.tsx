@@ -15,6 +15,7 @@ import {
 } from "react-icons/fa";
 import { FaGear } from "react-icons/fa6";
 import { financeNavLinks } from "../Dashbaord/Finance/financeRoutes";
+import { hrNavLinks } from "../Dashbaord/HumanResource/hrRoutes";
 
 /** Shape used by the sidebar for permission-gated items. */
 export interface SidebarPermission {
@@ -41,74 +42,8 @@ export const sideBar = [
           resource: "employee",
           action: "READ",
         } as SidebarPermission,
-        nestedLinks: [
-          {
-            name: "Dashboard",
-            link: "/dashboard/humanresource",
-            permission: { module: "hr", resource: "employee", action: "READ" },
-          },
-          {
-            name: "Employees",
-            link: "/dashboard/employees",
-            permission: { module: "hr", resource: "employee", action: "READ" },
-          },
-          {
-            name: "Departments",
-            link: "/dashboard/departments",
-            permission: { module: "hr", resource: "employee", action: "READ" },
-          },
-          {
-            name: "Onboarding",
-            link: "/dashboard/onboarding",
-            permission: {
-              module: "hr",
-              resource: "onboarding",
-              action: "READ",
-            },
-          },
-          {
-            name: "Leave Management",
-            link: "/dashboard/leavemanagement",
-            permission: {
-              module: "hr",
-              resource: "leave_management",
-              action: "READ",
-            },
-          },
-          {
-            name: "Attendance",
-            link: "/dashboard/attendance",
-            permission: {
-              module: "hr",
-              resource: "attendance",
-              action: "READ",
-            },
-          },
-          {
-            name: "Performance",
-            link: "/dashboard/performance",
-            permission: {
-              module: "hr",
-              resource: "performance",
-              action: "READ",
-            },
-          },
-          {
-            name: "Queries",
-            link: "/dashboard/queries",
-            permission: { module: "hr", resource: "queries", action: "READ" },
-          },
-          {
-            name: "Reports",
-            link: "/dashboard/reports",
-            permission: { module: "hr", resource: "reports", action: "READ" },
-          },
-          {
-            name: "Tasks",
-            link: "/dashboard/tasks",
-            permission: { module: "hr", resource: "tasks", action: "READ" },
-          },
-        ],
+        // HR navigation comes from the HR routing table so links stay in sync.
+        nestedLinks: hrNavLinks,
       },
       {
         name: "Finance",

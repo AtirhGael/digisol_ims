@@ -33,7 +33,7 @@ export const BusinessDevelopmentDashboard = () => {
     isError: isContactsError,
     refetch: refetchContacts,
   } = useFetchHook<ApiResponse<ContactsLeadsListResponse>>(
-    "contacts-leads?type=contacts&page=1&limit=200",
+    "contacts-leads?type=contacts&page=1&limit=50",
     "business-dashboard-contacts",
   );
 

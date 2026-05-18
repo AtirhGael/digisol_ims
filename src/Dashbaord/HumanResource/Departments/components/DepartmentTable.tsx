@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ReusableTable from "../../../../components/other/ReusableTable/ReusableTable";
 import type { Department } from "../types";
 import { createDepartmentColumns } from "../../../../components/Columns/DepartmentColumn";
+import SkeletonLoading from "../../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
 
 interface DepartmentTableProps {
   departments: Department[];
@@ -33,6 +34,10 @@ const DepartmentTable: React.FC<DepartmentTableProps> = ({
     onViewDepartment: handleViewClick,
     onDeleteDepartment: onDelete,
   });
+
+  if (loading) {
+    return <SkeletonLoading />;
+  }
 
   return (
     <ReusableTable

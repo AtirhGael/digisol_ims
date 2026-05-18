@@ -6,16 +6,23 @@ import { navigationService } from "../utils/navigationService";
 interface UseDeleteOptions {
   onSuccess?: (data: any) => void;
   onError?: (error: any) => void;
+  invalidateQueriesOnSuccess?: boolean;
 }
 
 interface UseDeleteResult {
   isLoading: boolean;
   isError: boolean;
   error: any;
-  mutate: (id: string | number) => void;
-  mutateAsync: (id: string | number) => Promise<any>;
+  mutate: (variables: string | number | DeleteVariables) => void;
+  mutateAsync: (variables: string | number | DeleteVariables) => Promise<any>;
   isSuccess: boolean;
   data: any;
+}
+
+interface DeleteVariables {
+  id: string | number;
+  data?: any;
+  endpoint?: string;
 }
 
 const baseURL = (import.meta as any).env.VITE_BASE_URL;
@@ -32,7 +39,11 @@ const apiClient = axios.create({
 // Add request interceptor for authentication
 apiClient.interceptors.request.use(
   (config) => {
-    const accessToken = useUserStore.getState().accessToken;
+    const accessToken =
+      useUserStore.getState().accessToken ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('accessToken')
+        : null);
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -116,22 +127,28 @@ export const useDeleteHook = <T = any>(
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (id: string | number) => {
-      const response = await apiClient.delete(`${endpoint}/${id}`);
+    mutationFn: async (variables: string | number | DeleteVariables) => {
+      const payload =
+        typeof variables === 'object' && variables !== null
+          ? variables
+          : { id: variables };
+      const requestUrl = `${payload.endpoint || endpoint}/${payload.id}`;
+      const response = await apiClient.delete(requestUrl, {
+        data: payload.data,
+      });
       return response.data;
     },
     onSuccess: (data, variables, context) => {
-      // Invalidate specified queries - clear the cache completely
-      if (invalidateQueries && invalidateQueries.length > 0) {
-        invalidateQueries.forEach((queryKey) => {
-          queryClient.invalidateQueries({ queryKey: [queryKey] });
-          // Also remove cached data to force refetch
-          queryClient.removeQueries({ queryKey: [queryKey] });
-        });
-      } else {
-        // Default invalidation - invalidate queries related to the endpoint
-        queryClient.invalidateQueries({ queryKey: [endpoint] });
-        queryClient.removeQueries({ queryKey: [endpoint] });
+      const shouldInvalidate = options?.invalidateQueriesOnSuccess !== false;
+
+      if (shouldInvalidate) {
+        if (invalidateQueries && invalidateQueries.length > 0) {
+          invalidateQueries.forEach((queryKey) => {
+            queryClient.invalidateQueries({ queryKey: [queryKey] });
+          });
+        } else {
+          queryClient.invalidateQueries({ queryKey: [endpoint] });
+        }
       }
       // Call custom onSuccess callback if provided
       if (options?.onSuccess) {

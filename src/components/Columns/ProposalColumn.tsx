@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MoreVertical, Eye, Pencil, Trash2 } from "lucide-react";
-import { Button } from "../ui/button";
+import { Button } from "../ui/Button";
 
 type ProposalStatus = "ACCEPTED" | "DRAFT" | "SENT" | "REJECTED" | "NEGOTIATION" | "PENDING";
 

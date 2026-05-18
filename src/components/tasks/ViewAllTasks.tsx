@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronUp, ChevronDown, ArrowLeft, X } from 'lucide-react';
-import { Button } from '../../components/ui/button';
+import { Button } from '../../components/ui/Button';
 import ReusableTable from '../../components/other/ReusableTable/ReusableTable';
 import { createTaskColumns } from '../Columns/TaskColumns';
 

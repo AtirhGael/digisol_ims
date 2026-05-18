@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { Department, CreateDepartmentRequest, UpdateDepartmentRequest, Pagination } from './types';
 import { useUserStore } from '../../../Store/UserStore';
 
-const API_BASE_URL = import.meta.env.VITE_BASE_URL?.replace('/api', '') || 'http://localhost:4000';
+const API_BASE_URL = (import.meta as any).env.VITE_BASE_URL || 'http://localhost:4000/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -44,14 +44,14 @@ export interface ApiResponse {
 
 export const useDepartments = () => {
   const fetchDepartments = async (page: number = 1, limit: number = 10) => {
-    const response = await apiClient.get<DepartmentsResponse>('/api/departments', {
+    const response = await apiClient.get<DepartmentsResponse>('/departments', {
       params: { page, limit }
     });
     return response.data;
   };
 
   const getDepartmentById = async (departmentId: string) => {
-    const response = await apiClient.get<SingleDepartmentResponse>(`/api/departments/${departmentId}`);
+    const response = await apiClient.get<SingleDepartmentResponse>(`/departments/${departmentId}`);
     return response.data;
   };
 
@@ -60,16 +60,21 @@ export const useDepartments = () => {
 
 export const useCreateDepartment = () => {
   const createDepartment = async (data: CreateDepartmentRequest) => {
-    const response = await apiClient.post<SingleDepartmentResponse>('/api/departments', data);
+    const response = await apiClient.post<SingleDepartmentResponse>('/departments', data);
     return response.data;
   };
 
-  return { createDepartment };
+  const createSubDepartment = async (data: CreateDepartmentRequest) => {
+    const response = await apiClient.post<SingleDepartmentResponse>('/departments/sub', data);
+    return response.data;
+  };
+
+  return { createDepartment, createSubDepartment };
 };
 
 export const useUpdateDepartment = () => {
   const updateDepartment = async (data: UpdateDepartmentRequest) => {
-    const response = await apiClient.put<SingleDepartmentResponse>(`/api/departments/${data.departmentId}`, data);
+    const response = await apiClient.put<SingleDepartmentResponse>(`/departments/${data.departmentId}`, data);
     return response.data;
   };
 
@@ -78,7 +83,7 @@ export const useUpdateDepartment = () => {
 
 export const useDeleteDepartment = () => {
   const deleteDepartment = async (departmentId: string) => {
-    const response = await apiClient.delete<ApiResponse>(`/api/departments/${departmentId}`);
+    const response = await apiClient.delete<ApiResponse>(`/departments/${departmentId}`);
     return response.data;
   };
 
@@ -93,7 +98,7 @@ export const useUsers = () => {
 
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
     
-    const response = await apiClient.get(`/api/users${query}`);
+    const response = await apiClient.get(`/users${query}`);
     return response.data;
   };
 

@@ -28,6 +28,8 @@ export interface Department {
   description: string | null;
   department_head_id: string | null;
   department_head: DepartmentHead | null;
+  team_lead_id?: string | null;
+  team_lead?: DepartmentHead | null;
   parent_department_id: string | null;
   parent_department: ParentDepartment | null;
   contact_email: string | null;

@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
 import {
   AlertDialog,
@@ -12,6 +15,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import useFetchHook from '../../../Hooks/UseFetchHook';
+import useDeleteHook from '../../../Hooks/UseDeleteHook';
+import useUpdate from '../../../Hooks/UseUpdateHook';
 
 interface LineItem {
   description: string;
@@ -45,11 +50,26 @@ interface LogEntry {
   timestamp: string;
 }
 
+const normalizeInvoiceStatus = (status?: string) =>
+  String(status ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+
 export const ViewInvoice = () => {
   // Navigation + route params.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { id } = useParams();
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentDate: new Date().toISOString().slice(0, 10),
+    paymentMethod: '',
+    referenceNumber: '',
+  });
   // Editable notes state.
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editableNotes, setEditableNotes] = useState(
@@ -75,6 +95,12 @@ export const ViewInvoice = () => {
       setEditableNotes(invoiceResponse.notes);
     }
   }, [invoiceResponse]);
+
+  const { mutateAsync: deleteInvoice, isLoading: isDeletingInvoice } = useDeleteHook(
+    '/finance/invoices',
+    ['finance-invoices']
+  );
+  const { updateData: recordPayment, loading: isRecordingPayment } = useUpdate<any>();
 
   if (isLoading) {
     return <SkeletonLoading />
@@ -108,76 +134,72 @@ export const ViewInvoice = () => {
     `${Number(value || 0).toLocaleString()}FCFA`;
 
   const mapStatus = (status?: string): resolvedInvoice['status'] => {
-    if (!status) return 'Pending';
-    if (status === 'PAID') return 'Paid';
-    if (status === 'PARTIALLY_PAID') return 'Partially Paid';
+    const normalizedStatus = normalizeInvoiceStatus(status);
+    if (normalizedStatus === 'PAID') return 'Paid';
+    if (normalizedStatus === 'PARTIALLY_PAID') return 'Partially Paid';
     return 'Pending';
   };
 
-  const resolvedInvoice: resolvedInvoice = useMemo(
-    () =>
-      invoiceData
-        ? {
-            invoiceNumber: invoiceData.invoice_number,
-            status: mapStatus(invoiceData.status),
-            billedTo: invoiceData.client_name || invoiceData.client_id || 'Unknown',
-            billingDetails: invoiceData.client_name || invoiceData.client_id || 'Unknown',
-            projectName: invoiceData.project_id || 'N/A',
-            issueDate: new Date(invoiceData.invoice_date).toLocaleDateString('en-US'),
-            dueDate: new Date(invoiceData.due_date).toLocaleDateString('en-US'),
-            notes: invoiceData.notes || '',
-            lineItems: (invoiceData.line_items || []).map((item: any) => ({
-              description: item.description || 'Item',
-              quantity: Number(item.quantity || 0),
-              unitPrice: formatCurrency(item.unit_price),
-              amount: formatCurrency(item.amount),
-            })),
-            subtotal: formatCurrency(invoiceData.subtotal),
-            discount: '0FCFA',
-            discountPercent: '0',
-            total: formatCurrency(invoiceData.total_amount),
-            amountPaid: formatCurrency(invoiceData.amount_paid),
-            amountDue: formatCurrency(invoiceData.outstanding_balance),
-            paymentBatch: 'Payment batch',
-            termsAndCondition:
-              invoiceData.terms_conditions ||
-              'Please ensure payment is made by the due date to avoid any late fees. Payment is due on or before the due date.',
-          }
-        : {
-            invoiceNumber: 'INV-2025-001',
-            status: 'Paid',
-            billedTo: 'john@gmail.com',
-            billingDetails: 'John Smith',
-            projectName: 'Project Genesis',
-            issueDate: '20 November 2025',
-            dueDate: '30 November 2025',
-            notes: '',
-            lineItems: [
-              {
-                description: 'Starlink kit and access point',
-                quantity: 1,
-                unitPrice: '320,000FCFA',
-                amount: '320,000FCFA',
-              },
-              {
-                description: 'Starlink kit and access point',
-                quantity: 1,
-                unitPrice: '320,000FCFA',
-                amount: '320,000FCFA',
-              },
-            ],
-            subtotal: '320,000FCFA',
-            discount: '32,000FCFA',
-            discountPercent: '10',
-            total: '320,000FCFA',
-            amountPaid: '0FCFA',
-            amountDue: '320,000FCFA',
-            paymentBatch: 'Payment batch January 2025',
-            termsAndCondition:
-              'Please ensure payment is made by the due date to avoid any late fees. Payment is due on or before the due date.',
+  const resolvedInvoice = invoiceData
+    ? {
+        invoiceNumber: invoiceData.invoice_number,
+        status: mapStatus(invoiceData.status),
+        billedTo: invoiceData.client_name || invoiceData.client_id || 'Unknown',
+        billingDetails: invoiceData.client_name || invoiceData.client_id || 'Unknown',
+        projectName: invoiceData.project_id || 'N/A',
+        issueDate: new Date(invoiceData.invoice_date).toLocaleDateString('en-US'),
+        dueDate: new Date(invoiceData.due_date).toLocaleDateString('en-US'),
+        notes: invoiceData.notes || '',
+        lineItems: (invoiceData.line_items || []).map((item: any) => ({
+          description: item.description || 'Item',
+          quantity: Number(item.quantity || 0),
+          unitPrice: formatCurrency(item.unit_price),
+          amount: formatCurrency(item.amount),
+        })),
+        subtotal: formatCurrency(invoiceData.subtotal),
+        discount: '0FCFA',
+        discountPercent: '0',
+        total: formatCurrency(invoiceData.total_amount),
+        amountPaid: formatCurrency(invoiceData.amount_paid),
+        amountDue: formatCurrency(invoiceData.outstanding_balance),
+        paymentBatch: 'Payment batch',
+        termsAndCondition:
+          invoiceData.terms_conditions ||
+          'Please ensure payment is made by the due date to avoid any late fees. Payment is due on or before the due date.',
+      }
+    : {
+        invoiceNumber: 'INV-2025-001',
+        status: 'Paid',
+        billedTo: 'john@gmail.com',
+        billingDetails: 'John Smith',
+        projectName: 'Project Genesis',
+        issueDate: '20 November 2025',
+        dueDate: '30 November 2025',
+        notes: '',
+        lineItems: [
+          {
+            description: 'Starlink kit and access point',
+            quantity: 1,
+            unitPrice: '320,000FCFA',
+            amount: '320,000FCFA',
           },
-    [invoiceData]
-  );
+          {
+            description: 'Starlink kit and access point',
+            quantity: 1,
+            unitPrice: '320,000FCFA',
+            amount: '320,000FCFA',
+          },
+        ],
+        subtotal: '320,000FCFA',
+        discount: '32,000FCFA',
+        discountPercent: '10',
+        total: '320,000FCFA',
+        amountPaid: '0FCFA',
+        amountDue: '320,000FCFA',
+        paymentBatch: 'Payment batch January 2025',
+        termsAndCondition:
+          'Please ensure payment is made by the due date to avoid any late fees. Payment is due on or before the due date.',
+      };
 
   const logs: LogEntry[] = [
     {
@@ -210,17 +232,87 @@ export const ViewInvoice = () => {
     navigate('/dashboard/invoice');
   };
 
-  // Confirm delete via toast action.
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-
   const handleDelete = () => {
     setDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    toast.success('Invoice deleted successfully');
-    setDeleteModalOpen(false);
-    navigate('/dashboard/invoice');
+  const openPaymentModal = () => {
+    const amountDue = Number(invoiceData?.outstanding_balance || 0);
+    setPaymentForm((prev) => ({
+      ...prev,
+      amount: amountDue > 0 ? String(amountDue) : '',
+      paymentDate: new Date().toISOString().slice(0, 10),
+    }));
+    setPaymentModalOpen(true);
+  };
+
+  const closePaymentModal = () => {
+    if (isRecordingPayment) return;
+    setPaymentModalOpen(false);
+  };
+
+  const handleRecordPayment = async () => {
+    if (!id) return;
+
+    const paymentAmount = Number(paymentForm.amount);
+    const amountDue = Number(invoiceData?.outstanding_balance || 0);
+
+    if (!paymentAmount || paymentAmount <= 0) {
+      toast.error('Enter a valid payment amount');
+      return;
+    }
+
+    if (amountDue > 0 && paymentAmount > amountDue) {
+      toast.error('Payment amount cannot exceed the amount due');
+      return;
+    }
+
+    if (!paymentForm.paymentDate) {
+      toast.error('Select a payment date');
+      return;
+    }
+
+    if (!paymentForm.paymentMethod) {
+      toast.error('Select a payment method');
+      return;
+    }
+
+    try {
+      await recordPayment(
+        `/finance/invoices/${id}/payment`,
+        {
+          payment_amount: paymentAmount,
+          payment_date: paymentForm.paymentDate,
+          payment_method: paymentForm.paymentMethod,
+          reference_number: paymentForm.referenceNumber || undefined,
+        },
+        'patch',
+      );
+      toast.success('Payment recorded successfully');
+      setPaymentModalOpen(false);
+      setPaymentForm({
+        amount: '',
+        paymentDate: new Date().toISOString().slice(0, 10),
+        paymentMethod: '',
+        referenceNumber: '',
+      });
+      await queryClient.invalidateQueries({ queryKey: ['finance-invoices'] });
+      refetch();
+    } catch (paymentError: any) {
+      toast.error(paymentError?.response?.data?.message || 'Failed to record payment');
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!id) return;
+    try {
+      await deleteInvoice(id);
+      toast.success('Invoice deleted successfully');
+      setDeleteModalOpen(false);
+      navigate('/dashboard/invoice');
+    } catch (deleteError: any) {
+      toast.error(deleteError?.response?.data?.message || 'Failed to delete invoice');
+    }
   };
 
   const cancelDelete = () => {
@@ -280,6 +372,15 @@ export const ViewInvoice = () => {
             </div>
           </div>
           <div className="flex items-center gap-4 no-print">
+            {resolvedInvoice.status !== 'Paid' && (
+              <Button
+                variant="default"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={openPaymentModal}
+              >
+                Record Payment
+              </Button>
+            )}
             <Button
               variant="default"
               className="bg-[#3d4094] hover:bg-[#2d3074]"
@@ -470,6 +571,15 @@ export const ViewInvoice = () => {
           </div>
 
           {/* Delete Button */}
+          {resolvedInvoice.status !== 'Paid' && (
+            <Button
+              variant="default"
+              className="w-full bg-green-600 hover:bg-green-700"
+              onClick={openPaymentModal}
+            >
+              Record Payment
+            </Button>
+          )}
           <Button
             variant="destructive"
             className="w-full bg-red-500 hover:bg-red-600"
@@ -503,9 +613,100 @@ export const ViewInvoice = () => {
             </button>
             <button
               onClick={confirmDelete}
+              disabled={isDeletingInvoice}
               className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              Delete
+              {isDeletingInvoice ? 'Deleting...' : 'Delete'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={paymentModalOpen}
+        onOpenChange={(open) => {
+          if (!open) closePaymentModal();
+        }}
+      >
+        <AlertDialogContent onOverlayClick={closePaymentModal}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Record Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Add a payment against this invoice. The invoice status will update based on the amount paid.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid grid-cols-1 gap-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Amount</label>
+              <Input
+                type="number"
+                min="1"
+                step="0.01"
+                value={paymentForm.amount}
+                onChange={(event) =>
+                  setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))
+                }
+                placeholder="Enter amount paid"
+              />
+              <p className="text-xs text-gray-500">
+                Amount due: {formatCurrency(invoiceData?.outstanding_balance)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Payment Date</label>
+              <Input
+                type="date"
+                value={paymentForm.paymentDate}
+                onChange={(event) =>
+                  setPaymentForm((prev) => ({ ...prev, paymentDate: event.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Payment Method</label>
+              <CustomSelect
+                options={[
+                  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                  { value: 'CASH', label: 'Cash' },
+                  { value: 'CHECK', label: 'Check' },
+                  { value: 'MTN MOMO', label: 'MTN MoMo' },
+                  { value: 'Orange Money', label: 'Orange Money' },
+                ]}
+                value={paymentForm.paymentMethod}
+                onChange={(value) =>
+                  setPaymentForm((prev) => ({ ...prev, paymentMethod: value }))
+                }
+                placeholder="Select method"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Reference Number</label>
+              <Input
+                value={paymentForm.referenceNumber}
+                onChange={(event) =>
+                  setPaymentForm((prev) => ({
+                    ...prev,
+                    referenceNumber: event.target.value,
+                  }))
+                }
+                placeholder="Enter reference number"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <button
+              onClick={closePaymentModal}
+              disabled={isRecordingPayment}
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRecordPayment}
+              disabled={isRecordingPayment}
+              className="inline-flex items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {isRecordingPayment ? 'Recording...' : 'Record Payment'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

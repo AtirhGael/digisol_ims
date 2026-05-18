@@ -20,60 +20,45 @@ function SectionCard({
   );
 }
 
-const hrProjects = [
-  "HR Operations",
-  "Payroll",
-  "Performance Management",
-  "Leave Management",
-  "Attendance",
-  "Recruitment",
-  "Training & Development",
-  "Employee Engagement",
-  "Compliance",
-  "Benefits",
-  "Employee Relations",
-  "Health & Safety",
-];
+type TaskDepartmentOption = {
+  value: string;
+  label: string;
+};
 
-const hrEmployees = [
-  { value: "prescilia", label: "Prescilia Ebeh" },
-  { value: "grace", label: "Grace Phillips" },
-  { value: "gael", label: "Ateh Gael" },
-  { value: "sophie", label: "Sophie Martin" },
-  { value: "amanda", label: "Amanda Williams" },
-  { value: "lisa", label: "Lisa Rodriguez" },
-  { value: "emily", label: "Emily Nelson" },
-  { value: "kevin", label: "Kevin Park" },
-  { value: "rachel", label: "Rachel Brown" },
-  { value: "david", label: "David Thompson" },
-];
+type TaskEmployeeOption = {
+  value: string;
+  label: string;
+};
 
 export interface HRTaskFormData {
   taskName: string;
   taskDescription: string;
   assignedTo: string;
-  assignee: string;
-  startDate: string;
   endDate: string;
-  projectName: string;
+  departmentId: string;
   priority: string;
   notes: string;
 }
 
 interface AddHRTaskFormProps {
   onBack: () => void;
+  departmentOptions: TaskDepartmentOption[];
+  employeeOptions: TaskEmployeeOption[];
   onSubmit: (data: HRTaskFormData) => void;
 }
 
-export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }) => {
+export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({
+  onBack,
+  departmentOptions,
+  employeeOptions,
+  onSubmit,
+}) => {
   const [formData, setFormData] = useState<HRTaskFormData>({
     taskName: "",
     taskDescription: "",
     assignedTo: "",
-    assignee: "",
-    startDate: "",
     endDate: "",
-    projectName: "",
+    departmentId: "",
     priority: "Medium",
     notes: "",
   });
@@ -94,11 +79,16 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
     Low: "text-gray-600 bg-gray-50",
     Medium: "text-amber-700 bg-amber-50",
     High: "text-red-600 bg-red-50",
+    Critical: "text-purple-700 bg-purple-50",
   };
+
+  const selectedDepartment =
+    departmentOptions.find((department) => department.value === formData.departmentId)?.label || "—";
+  const selectedAssignee =
+    employeeOptions.find((employee) => employee.value === formData.assignedTo)?.label || "—";
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Back */}
       <button
         type="button"
         onClick={onBack}
@@ -108,19 +98,14 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
         Back to Tasks
       </button>
 
-      {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Add New Task</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Create a new HR department task
-        </p>
+        <p className="text-sm text-gray-500 mt-0.5">Create a new HR department task</p>
       </div>
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Form — 2/3 */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Task Info */}
             <SectionCard>
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary" />
@@ -157,19 +142,19 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
                 </div>
                 <div className="space-y-1">
                   <label className={labelCls}>
-                    Project / Area <span className="text-red-500">*</span>
+                    Department / Area <span className="text-red-500">*</span>
                   </label>
                   <select
-                    name="projectName"
+                    name="departmentId"
                     className={inputCls}
-                    value={formData.projectName}
+                    value={formData.departmentId}
                     onChange={handleChange}
                     required
                   >
-                    <option value="">Select HR project or area</option>
-                    {hrProjects.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
+                    <option value="">Select department or area</option>
+                    {departmentOptions.map((department) => (
+                      <option key={department.value} value={department.value}>
+                        {department.label}
                       </option>
                     ))}
                   </select>
@@ -177,87 +162,49 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
               </div>
             </SectionCard>
 
-            {/* Assignment */}
             <SectionCard>
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary" />
                 <h2 className="text-base font-semibold text-gray-800">Assignment</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className={labelCls}>
-                    Assigned To <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="assignedTo"
-                    className={inputCls}
-                    value={formData.assignedTo}
-                    onChange={handleChange}
-                    required
-                  >
-                    <option value="">Select employee</option>
-                    {hrEmployees.map((emp) => (
-                      <option key={emp.value} value={emp.value}>
-                        {emp.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className={labelCls}>
-                    Assignee <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    name="assignee"
-                    className={inputCls}
-                    value={formData.assignee}
-                    onChange={handleChange}
-                    required
-                  >
-                    <option value="">Select assignee</option>
-                    {hrEmployees.map((emp) => (
-                      <option key={emp.value} value={emp.value}>
-                        {emp.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-1">
+                <label className={labelCls}>
+                  Assignee <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="assignedTo"
+                  className={inputCls}
+                  value={formData.assignedTo}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select employee</option>
+                  {employeeOptions.map((employee) => (
+                    <option key={employee.value} value={employee.value}>
+                      {employee.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </SectionCard>
 
-            {/* Schedule */}
             <SectionCard>
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary" />
                 <h2 className="text-base font-semibold text-gray-800">Schedule</h2>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className={labelCls}>
-                    Start Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="startDate"
-                    className={inputCls}
-                    value={formData.startDate}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className={labelCls}>
-                    Due Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    className={inputCls}
-                    value={formData.endDate}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className={labelCls}>
+                  Due Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  name="endDate"
+                  className={inputCls}
+                  value={formData.endDate}
+                  onChange={handleChange}
+                  required
+                />
               </div>
               <div className="mt-4 space-y-1">
                 <label className={labelCls}>Additional Notes</label>
@@ -280,32 +227,29 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
             </SectionCard>
           </div>
 
-          {/* Sidebar — 1/3 */}
           <div className="space-y-6">
-            {/* Priority */}
             <SectionCard>
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
                 Priority
               </h3>
               <div className="flex gap-2">
-                {["Low", "Medium", "High"].map((p) => (
+                {["Low", "Medium", "High", "Critical"].map((priority) => (
                   <button
-                    key={p}
+                    key={priority}
                     type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, priority: p }))}
+                    onClick={() => setFormData((prev) => ({ ...prev, priority }))}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition ${
-                      formData.priority === p
-                        ? `${priorityColor[p]} border-current`
+                      formData.priority === priority
+                        ? `${priorityColor[priority]} border-current`
                         : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    {p}
+                    {priority}
                   </button>
                 ))}
               </div>
             </SectionCard>
 
-            {/* Summary */}
             <SectionCard>
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
                 Task Summary
@@ -318,37 +262,21 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Project</span>
-                  <span className="font-medium text-gray-800">
-                    {formData.projectName || "—"}
-                  </span>
+                  <span className="text-gray-500">Department</span>
+                  <span className="font-medium text-gray-800">{selectedDepartment}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Assigned To</span>
-                  <span className="font-medium text-gray-800">
-                    {formData.assignedTo
-                      ? hrEmployees.find((e) => e.value === formData.assignedTo)?.label ?? formData.assignedTo
-                      : "—"}
-                  </span>
+                  <span className="font-medium text-gray-800">{selectedAssignee}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Priority</span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColor[formData.priority] ?? "bg-gray-50 text-gray-600"}`}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      priorityColor[formData.priority] ?? "bg-gray-50 text-gray-600"
+                    }`}
                   >
                     {formData.priority}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Start</span>
-                  <span className="font-medium text-gray-800">
-                    {formData.startDate
-                      ? new Date(formData.startDate).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })
-                      : "—"}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -366,7 +294,6 @@ export const AddHRTaskForm: React.FC<AddHRTaskFormProps> = ({ onBack, onSubmit }
               </div>
             </SectionCard>
 
-            {/* Info */}
             <SectionCard>
               <div className="p-3 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-800">

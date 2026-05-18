@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { MoreVertical, Eye, Edit, Trash2, Download } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '../ui/Button'
 import { Memorandum } from '../../Dashbaord/BusinessDevelopment/ProposalContracts/Memorandum/Memorandum.types'
 
 // Column actions props

@@ -1,117 +1,291 @@
-'use client'
+import React, { useEffect, useState } from 'react'
+import { Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
-import { useState, useEffect, useRef } from 'react'
-import { FaClock } from 'react-icons/fa'
-import { Ellipsis } from 'lucide-react';
-import { AttendanceCards } from './components/AttendanceCards';
-import { MarkAttendanceModal } from './components/MarkAttendanceModal';
-import { TodayAttendanceTab } from '../Attendance/tabs/TodayAttendanceTab';
-import { AttendanceHistoryTab } from '../Attendance/tabs/AttendanceHistoryTab';
-import { AttendanceReportsTab } from '../Attendance/tabs/AttendanceReportsTab';
-import { AttendanceSettingsTab } from '../Attendance/tabs/AttendanceSettingsTab';
+import { AttendanceIndexPage } from './components/AttendanceIndexPage'
+import { AttendanceRecordEditPage } from './components/AttendanceRecordEditPage'
+import { AttendanceRecordViewPage } from './components/AttendanceRecordViewPage'
+import { MarkAttendancePage } from './components/MarkAttendancePage'
+import { useAttendanceData } from './hooks/useAttendanceData'
+import { useAttendanceMutations } from './hooks/useAttendanceMutations'
 
-import type { AttendanceProps, InputValues } from '../../../Types/Types';
-import { attendanceList, attendanceTabTitles, attendanceHistoryData } from '../../../data/attendanceData';
+import { ATTENDANCE_TAB_TITLES } from './constants'
+import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading'
+import type {
+  AttendanceNavigationState,
+  AttendanceRecord,
+  AttendanceScope,
+} from './types'
 
-
-
-
-
-
-export const Attendance = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedStatuses, setSelectedStatuses] = useState<{[key: string]: string}>({});
-  const [inputValues, setInputValues] = useState<InputValues>({})
-  const [activeIndex, setActiveIndex] = useState(0);
-  const tabTitles = attendanceTabTitles;
-
-  // Today's attendance — plain array; ReusableTable handles filtering/pagination
-  const list = attendanceList.map(item => ({ ...item }));
-
-  const handleStatusChange = (id: string | number, value: string) => {
-    setSelectedStatuses(prev => ({ ...prev, [id]: value }));
-  };
-
-  const handleInputChange = (id: number | string, field: string, value: string) => {
-    setInputValues(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
-  };
-
-  // Attendance History — date is the first filter (external), status/search handled by ReusableTable
-  const attendanceHistory = attendanceHistoryData;
-  const [selectedHistoryDate, setSelectedHistoryDate] = useState(attendanceHistory[0].date);
-  const selectedHistoryRecords = (
-    attendanceHistory.find(h => h.date === selectedHistoryDate) || attendanceHistory[0]
-  ).records;
-
-  const renderTabContent = () => {
-    switch (activeIndex) {
-      case 0:
-        return <TodayAttendanceTab data={list} />;
-      case 1:
-        return (
-          <AttendanceHistoryTab
-            records={selectedHistoryRecords}
-            attendanceHistory={attendanceHistory}
-            selectedHistoryDate={selectedHistoryDate}
-            setSelectedHistoryDate={setSelectedHistoryDate}
-          />
-        );
-      case 2:
-        return <AttendanceReportsTab />;
-      case 3:
-        return <AttendanceSettingsTab />;
-      default:
-        return null;
-    }
-  };
+const AttendanceTodayViewRoute = ({
+  getTodayRecord,
+  goBackToAttendance,
+  goToTodayEdit,
+}: {
+  getTodayRecord: (id: string) => AttendanceRecord | null
+  goBackToAttendance: () => void
+  goToTodayEdit: (id: string) => void
+}) => {
+  const { id } = useParams()
+  const record = getTodayRecord(id!)
 
   return (
-    <>
-      <div className='flex flex-col gap-5'>
-        {/* Header section */}
-        <div className='flex justify-between items-center'>
-          <div className='flex flex-col gap-1'>
-            <h1 className='font-bold text-2xl'>Attendance Tracking</h1>
-            <p className='font-light text-gray-500 text-xs'>
-              Friday, 12 January 2024
-            </p>
-          </div>
-          <div>
-            <button 
-              className='px-7 py-3 rounded-xl border flex items-center text-sm text-white bg-[#3D3C7A] gap-2 hover:opacity-85 duration-100'
-              onClick={() => setIsOpen(true)}
-            >
-              < FaClock /> Mark Attendance
-            </button>
-          </div>
-        </div>
-        {/* Cards section */}
-        <AttendanceCards />
-        {/* Body section with tabs */}
-        <div className='flex flex-wrap border-b-2 border-gray-200'>
-          {tabTitles.map((title, index) => (
-            <button
-              key={index}
-              className={`px-4 sm:px-8 md:px-12 py-2 sm:py-3 md:py-4 text-xs sm:text-sm text-gray-500 font-medium ${activeIndex === index ? 'text-primary border-b-2 border-primary' : 'hover:opacity-70 duration-100'} hover:cursor-pointer`}
-              onClick={() => setActiveIndex(index)}
-            >{title}</button>
-          ))}
-        </div>
-        {/* Tabs Content */}
-        <div>
-          {renderTabContent()}
-        </div>
-      </div>
-      {/* Mark Attendance Modal */}
-      <MarkAttendanceModal
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-        list={list}
-        selectedStatuses={selectedStatuses}
-        handleStatusChange={handleStatusChange}
-        inputValues={inputValues}
-        handleInputChange={handleInputChange}
+    <AttendanceRecordViewPage
+      title="View Attendance Record"
+      backLabel="Back to Today's Attendance"
+      record={record}
+      onBack={goBackToAttendance}
+      onEdit={() => {
+        if (record) goToTodayEdit(record.id)
+      }}
+    />
+  )
+}
+
+const AttendanceTodayEditRoute = ({
+  getTodayRecord,
+  goBackToAttendance,
+  onSave,
+}: {
+  getTodayRecord: (id: string) => AttendanceRecord | null
+  goBackToAttendance: () => void
+  onSave: (record: AttendanceRecord) => void | Promise<void>
+}) => {
+  const { id } = useParams()
+  const record = getTodayRecord(id!)
+
+  return (
+    <AttendanceRecordEditPage
+      title="Edit Attendance Record"
+      backLabel="Back to Today's Attendance"
+      record={record}
+      onBack={goBackToAttendance}
+      onSave={onSave}
+    />
+  )
+}
+
+const AttendanceHistoryViewRoute = ({
+  getHistoryRecord,
+  goBackToHistory,
+  goToHistoryEdit,
+}: {
+  getHistoryRecord: (date: string, id: string) => AttendanceRecord | null
+  goBackToHistory: (date: string) => void
+  goToHistoryEdit: (date: string, id: string) => void
+}) => {
+  const { date, id } = useParams()
+  const record = date ? getHistoryRecord(date, id!) : null
+
+  return (
+    <AttendanceRecordViewPage
+      title="View Attendance History Record"
+      backLabel="Back to Attendance History"
+      record={record}
+      recordDate={date}
+      onBack={() => {
+        if (date) goBackToHistory(date)
+      }}
+      onEdit={() => {
+        if (date && record) goToHistoryEdit(date, record.id)
+      }}
+    />
+  )
+}
+
+const AttendanceHistoryEditRoute = ({
+  getHistoryRecord,
+  goBackToHistory,
+  onSave,
+}: {
+  getHistoryRecord: (date: string, id: string) => AttendanceRecord | null
+  goBackToHistory: (date: string) => void
+  onSave: (date: string, record: AttendanceRecord) => void | Promise<void>
+}) => {
+  const { date, id } = useParams()
+  const record = date ? getHistoryRecord(date, id!) : null
+
+  return (
+    <AttendanceRecordEditPage
+      title="Edit Attendance History Record"
+      backLabel="Back to Attendance History"
+      record={record}
+      onBack={() => {
+        if (date) goBackToHistory(date)
+      }}
+      onSave={(updatedRecord) => {
+        if (date) onSave(date, updatedRecord)
+      }}
+    />
+  )
+}
+
+export const Attendance = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const navigationState = location.state as AttendanceNavigationState | null
+
+  // Attendance owns nested routes so tab state survives view/edit navigation round trips.
+  const [isOpen, setIsOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const {
+    todayRecords,
+    historyRecords,
+    attendanceEmployees,
+    employeesResponse,
+    todayOnLeaveCount,
+    loading,
+    refetchAttendance,
+    selectedHistoryDate,
+    setSelectedHistoryDate,
+    getTodayRecord,
+    getHistoryRecord,
+  } = useAttendanceData()
+
+  const { handleAttendanceUpdate } = useAttendanceMutations(refetchAttendance)
+
+  useEffect(() => {
+    // Route state is used to restore the tab/date selection after view/edit navigation.
+    if (navigationState?.activeTab !== undefined) {
+      setActiveIndex(navigationState.activeTab)
+    }
+    if (navigationState?.selectedHistoryDate) {
+      setSelectedHistoryDate(navigationState.selectedHistoryDate)
+    }
+  }, [navigationState])
+
+  const navigateToAttendance = (state?: AttendanceNavigationState) => {
+    navigate('/dashboard/attendance', { state })
+  }
+
+  // History records include a date segment, while today's records only need their row id.
+  const navigateToRecord = (mode: 'view' | 'edit', scope: AttendanceScope, id: string, date?: string) => {
+    if (scope === 'history' && date) {
+      navigate(`/dashboard/attendance/${mode}/history/${date}/${id}`, {
+        state: { activeTab: 1, selectedHistoryDate: date },
+      })
+      return
+    }
+
+    navigate(`/dashboard/attendance/${mode}/today/${id}`, {
+      state: { activeTab: 0 },
+    })
+  }
+
+  const totalStaff = employeesResponse?.data?.length ?? 0
+  const todayPresentCount = todayRecords.filter((record) => record.status === 'Present').length
+  const todayAbsentCount = todayRecords.filter((record) => record.status === 'Absent').length
+  const todayLateCount = todayRecords.filter((record) => record.status === 'Late').length
+
+  return (
+    <Routes>
+      <Route
+        index
+        element={
+          loading ? (
+            <SkeletonLoading />
+          ) : (
+            <AttendanceIndexPage
+              isOpen={isOpen}
+              setIsOpen={setIsOpen}
+              activeIndex={activeIndex}
+              setActiveIndex={setActiveIndex}
+              tabTitles={ATTENDANCE_TAB_TITLES}
+              list={todayRecords}
+              attendanceEmployees={attendanceEmployees}
+              attendanceHistory={historyRecords}
+              selectedHistoryDate={selectedHistoryDate}
+              setSelectedHistoryDate={setSelectedHistoryDate}
+              onViewTodayRecord={(id) => navigateToRecord('view', 'today', id)}
+              onViewHistoryRecord={(date, id) => navigateToRecord('view', 'history', id, date)}
+              onManualAttendanceSaved={refetchAttendance}
+              totalStaff={totalStaff}
+              todayPresentCount={todayPresentCount}
+              todayAbsentCount={todayAbsentCount}
+              todayLateCount={todayLateCount}
+              todayOnLeaveCount={todayOnLeaveCount}
+            />
+          )
+        }
       />
-    </>
+      <Route
+        path="mark"
+        element={
+          <MarkAttendancePage
+            onBack={() => navigateToAttendance({ activeTab: 0 })}
+            onSaved={refetchAttendance}
+          />
+        }
+      />
+      <Route
+        path="view/today/:id"
+        element={
+          loading ? (
+            <SkeletonLoading />
+          ) : (
+            <AttendanceTodayViewRoute
+              getTodayRecord={getTodayRecord}
+              goBackToAttendance={() => navigateToAttendance({ activeTab: 0 })}
+              goToTodayEdit={(id) => navigateToRecord('edit', 'today', id)}
+            />
+          )
+        }
+      />
+      <Route
+        path="edit/today/:id"
+        element={
+          loading ? (
+            <SkeletonLoading />
+          ) : (
+            <AttendanceTodayEditRoute
+              getTodayRecord={getTodayRecord}
+              goBackToAttendance={() => navigateToAttendance({ activeTab: 0 })}
+              onSave={async (updatedRecord) => {
+                const success = await handleAttendanceUpdate(updatedRecord)
+                if (success) {
+                  navigateToRecord('view', 'today', updatedRecord.id)
+                }
+              }}
+            />
+          )
+        }
+      />
+      <Route
+        path="view/history/:date/:id"
+        element={
+          loading ? (
+            <SkeletonLoading />
+          ) : (
+            <AttendanceHistoryViewRoute
+              getHistoryRecord={getHistoryRecord}
+              goBackToHistory={(date) =>
+                navigateToAttendance({ activeTab: 1, selectedHistoryDate: date })
+              }
+              goToHistoryEdit={(date, id) => navigateToRecord('edit', 'history', id, date)}
+            />
+          )
+        }
+      />
+      <Route
+        path="edit/history/:date/:id"
+        element={
+          loading ? (
+            <SkeletonLoading />
+          ) : (
+            <AttendanceHistoryEditRoute
+              getHistoryRecord={getHistoryRecord}
+              goBackToHistory={(date) =>
+                navigateToAttendance({ activeTab: 1, selectedHistoryDate: date })
+              }
+              onSave={async (date, updatedRecord) => {
+                const success = await handleAttendanceUpdate(updatedRecord)
+                if (success) {
+                  navigateToRecord('view', 'history', updatedRecord.id, date)
+                }
+              }}
+            />
+          )
+        }
+      />
+    </Routes>
   )
 }

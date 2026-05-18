@@ -28,7 +28,6 @@ export const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // if the fileds are empty
     if (!LoginDetails.email || !LoginDetails.password) {
       toast.error("Please fill in all fields");
       setLoading(false);
@@ -42,30 +41,35 @@ export const Login = () => {
         },
         body: JSON.stringify(LoginDetails),
       });
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : { message: await response.text() };
 
       if (!response.ok) {
-        setLoading(false);
-        toast.error(data.message || "Login failed. Please try again.");
+        toast.error(
+          data.message ||
+            `Login failed (${response.status}). Please check the API server.`,
+        );
         return;
       }
+
+      const loginData = data.data || data;
+      const userData = loginData.user;
+      const token = loginData.token || loginData.accessToken;
+      const refreshToken = loginData.refresh_token || loginData.refreshToken;
+      const permissions = loginData.permissions ?? [];
+      const roles = userData?.roles ?? [];
+      const mustChangePassword = Boolean(userData?.password_must_change);
+
       toast.success("Login successful!");
-      const mustChangePassword =
-        data?.data?.user?.password_must_change || false;
-      const permissions = data?.data?.permissions ?? [];
-      const roles = data?.data?.user?.roles ?? [];
-      login(
-        data?.data?.user,
-        data?.data?.token,
-        data?.data?.refresh_token,
-        mustChangePassword,
-        permissions,
-        roles,
-      );
-      setLoading(false);
+      login(userData, token, refreshToken, mustChangePassword, permissions, roles);
     } catch (error) {
-      setLoading(false);
-      toast.error("An error occurred. Please try again.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "An error occurred. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -82,19 +86,19 @@ export const Login = () => {
         <div className="max-w-350 w-87.5 flex flex-col gap-6">
           <div className="flex flex-col">
             <h1 className="text-3xl font-semibold">Login</h1>
-            <p className="mt-2">Hi, Welcome back🙌</p>
+            <p className="mt-2">Hi, welcome back</p>
           </div>
           {/* login text section */}
           <div className="max-w-87.5 relative border border-gray-200">
             <p className="text-gray-400 absolute bg-white p-2 -top-5 left-[50%] translate-x-[-50%] text-[12px]">
-              Login with username
+              Login with email
             </p>
           </div>
           {/* login form */}
           <form className="mt-10" onSubmit={handleSubmit}>
             {/* email */}
             <div>
-              <label>Email/Username</label>
+              <label>Email</label>
               <Input
                 type="email"
                 onChange={(e) =>

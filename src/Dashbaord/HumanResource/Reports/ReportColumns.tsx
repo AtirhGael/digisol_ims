@@ -11,7 +11,6 @@ const statusStyles: Record<string, string> = {
 
 const categoryStyles: Record<string, string> = {
   Attendance: "bg-blue-50 text-blue-700",
-  Payroll: "bg-purple-50 text-purple-700",
   Leave: "bg-emerald-50 text-emerald-700",
   Performance: "bg-amber-50 text-amber-700",
   Headcount: "bg-indigo-50 text-indigo-700",
@@ -25,13 +24,15 @@ function ReportActionMenu({
   onView,
   onDownload,
   onDelete,
+  showDelete = true,
 }: {
   rowId: string;
   openMenuId: string | null;
   onToggleMenu: (id: string | null) => void;
   onView: () => void;
   onDownload: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  showDelete?: boolean;
 }) {
   const isOpen = openMenuId === rowId;
   return (
@@ -62,13 +63,15 @@ function ReportActionMenu({
           >
             <Download size={15} /> Download
           </button>
-          <button
-            type="button"
-            className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
-            onClick={onDelete}
-          >
-            <Trash2 size={15} /> Delete
-          </button>
+          {showDelete ? (
+            <button
+              type="button"
+              className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
+              onClick={onDelete}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+          ) : null}
         </div>
       )}
     </div>
@@ -81,12 +84,14 @@ export function createReportColumns({
   onView,
   onDownload,
   onDelete,
+  showDelete = true,
 }: {
   openMenuId: string | null;
   onToggleMenu: (id: string | null) => void;
   onView: (report: HRReport) => void;
   onDownload: (report: HRReport) => void;
-  onDelete: (report: HRReport) => void;
+  onDelete?: (report: HRReport) => void;
+  showDelete?: boolean;
 }) {
   return [
     {
@@ -119,11 +124,13 @@ export function createReportColumns({
       header: "Date",
       render: (val: string) => (
         <span className="text-sm text-gray-600">
-          {new Date(val).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
+          {val
+            ? new Date(val).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : "—"}
         </span>
       ),
     },
@@ -153,7 +160,8 @@ export function createReportColumns({
           onToggleMenu={onToggleMenu}
           onView={() => onView(row)}
           onDownload={() => onDownload(row)}
-          onDelete={() => onDelete(row)}
+          onDelete={onDelete ? () => onDelete(row) : undefined}
+          showDelete={showDelete}
         />
       ),
     },

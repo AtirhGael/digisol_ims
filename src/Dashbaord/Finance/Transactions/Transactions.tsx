@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "../../../components/other/Card";
 import { Button } from "../../../components/ui/button";
 import { useUserStore } from "../../../Store/UserStore";
@@ -12,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
-import { MoreVertical, Eye, Trash2 } from "lucide-react";
+import { MoreVertical, Eye, CheckCircle, Trash2 } from "lucide-react";
 import {
   FaMoneyBillWave,
   FaArrowTrendUp,
@@ -20,7 +21,7 @@ import {
   FaClipboardCheck,
   FaDollarSign,
 } from "react-icons/fa6";
-import { type Transaction, voidTransaction } from "../financeApi";
+import { type Transaction, updateTransactionStatus, voidTransaction } from "../financeApi";
 import SkeletonLoading from "../../../components/other/Loader/SkeletonLoading/SkeletonLoading";
 import { toast } from "sonner";
 import useFetchHook from "../../../Hooks/UseFetchHook";
@@ -34,16 +35,44 @@ interface RecentTransaction {
 }
 
 interface AccountPayable {
+  id: string;
   vendor: string;
   poNumber: string;
   amount: string;
   dueDate: string;
-  status: "Approve" | "Approved";
+  actionLabel: string;
+  disabled: boolean;
 }
+
+type DisplayStatus = "Pending" | "Completed";
+type TransactionStatus = "RECORDED" | "VERIFIED" | "POSTED";
+
+const getDisplayStatus = (status: string): DisplayStatus => {
+  return ["COMPLETED", "POSTED"].includes(status) ? "Completed" : "Pending";
+};
+
+const getTransactionTitle = (transaction: Transaction) => {
+  const category = transaction.category?.trim();
+  if (category) return category;
+  return `${transaction.transaction_type} transaction`;
+};
+
+const getNextTransactionStatus = (status: string): TransactionStatus | null => {
+  if (status === "RECORDED" || status === "PENDING") return "VERIFIED";
+  if (status === "VERIFIED") return "POSTED";
+  return null;
+};
+
+const getPayableActionLabel = (status: string) => {
+  if (status === "RECORDED" || status === "PENDING") return "Approve";
+  if (status === "VERIFIED") return "Complete";
+  return "Completed";
+};
 
 export const Transactions = () => {
   // Navigation + paging state.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const roles = useUserStore((state) => state.roles);
   const permissions = useUserStore((state) => state.permissions);
 
@@ -63,6 +92,8 @@ export const Transactions = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState(false);
+  const [updatingPayableId, setUpdatingPayableId] = useState<string | null>(null);
 
   const endpoint = `/finance/transactions?page=${currentPage}&page_size=10`;
   const {
@@ -78,7 +109,11 @@ export const Transactions = () => {
 
   useEffect(() => {
     if (transactionsResponse?.data) {
-      setTransactions(transactionsResponse.data);
+      setTransactions(
+        transactionsResponse.data.filter(
+          (transaction) => transaction.status !== "VOIDED",
+        ),
+      );
     }
   }, [transactionsResponse?.data]);
 
@@ -114,9 +149,7 @@ export const Transactions = () => {
     .slice(0, 4)
     .map((t) => ({
       id: t.transaction_id,
-      title:
-        t.description?.substring(0, 40) ||
-        `${t.transaction_type} - ${t.category}`,
+      title: getTransactionTitle(t),
       date: new Date(t.transaction_date).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -128,8 +161,10 @@ export const Transactions = () => {
 
   // Accounts payable list from pending transactions.
   const accountsPayable: AccountPayable[] = transactions
+    .filter((t) => t.transaction_type === "Expense" && getNextTransactionStatus(t.status))
     .slice(0, 3)
-    .map((t, index) => ({
+    .map((t) => ({
+      id: t.transaction_id,
       vendor: t.category || "Unknown",
       poNumber: t.reference_number || t.transaction_number,
       amount: `${t.currency || "XAF"} ${Number(t.amount).toLocaleString()}`,
@@ -137,7 +172,8 @@ export const Transactions = () => {
         month: "short",
         day: "numeric",
       }),
-      status: index === 0 ? "Approved" : "Approve",
+      actionLabel: getPayableActionLabel(t.status),
+      disabled: updatingPayableId === t.transaction_id,
     }));
 
   // Route to add transaction.
@@ -160,6 +196,40 @@ export const Transactions = () => {
     setOpenMenuId(null);
   };
 
+  const handleAdvanceTransaction = async (transactionId: string) => {
+    const transaction = transactions.find((item) => item.transaction_id === transactionId);
+    const nextStatus = transaction ? getNextTransactionStatus(transaction.status) : null;
+
+    if (!transaction || !nextStatus) return;
+
+    setUpdatingPayableId(transactionId);
+    try {
+      const updatedTransaction = await updateTransactionStatus(transactionId, nextStatus);
+      setTransactions((prev) =>
+        prev.map((item) =>
+          item.transaction_id === transactionId
+            ? { ...item, ...(updatedTransaction || {}), status: nextStatus }
+            : item,
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["finance-transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["finance-dashboard"] });
+      if (transaction.transaction_type === "Expense") {
+        await queryClient.invalidateQueries({ queryKey: ["finance-budgets"] });
+        queryClient.removeQueries({ queryKey: ["finance-budgets"] });
+      }
+      toast.success(
+        nextStatus === "POSTED"
+          ? "Transaction completed successfully."
+          : "Transaction approved successfully.",
+      );
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update transaction.");
+    } finally {
+      setUpdatingPayableId(null);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteId) return;
     if (deleteReason.trim().length < 10) {
@@ -167,11 +237,15 @@ export const Transactions = () => {
       return;
     }
 
+    setIsDeletingTransaction(true);
     try {
       await voidTransaction(deleteId, deleteReason.trim());
       setTransactions((prev) =>
         prev.filter((t) => t.transaction_id !== deleteId),
       );
+      await queryClient.invalidateQueries({ queryKey: ["finance-budgets"] });
+      await queryClient.invalidateQueries({ queryKey: ["finance-dashboard"] });
+      queryClient.removeQueries({ queryKey: ["finance-budgets"] });
       toast.success("Transaction voided successfully.");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to void transaction.");
@@ -179,6 +253,7 @@ export const Transactions = () => {
       setDeleteModalOpen(false);
       setDeleteId(null);
       setDeleteReason("");
+      setIsDeletingTransaction(false);
     }
   };
 
@@ -190,13 +265,6 @@ export const Transactions = () => {
 
   const tableColumns = useMemo(
     () => [
-      {
-        key: "transaction_number",
-        header: "Transaction ID",
-        render: (value: string) => (
-          <span className="text-blue-600 font-medium">{value}</span>
-        ),
-      },
       {
         key: "amount",
         header: "Amount",
@@ -229,16 +297,14 @@ export const Transactions = () => {
         render: (value: string) => new Date(value).toLocaleDateString("en-GB"),
       },
       {
-        key: "status",
+        key: "display_status",
         header: "Status",
         render: (value: string) => (
           <span
             className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              ["PENDING", "RECORDED", "VERIFIED"].includes(value)
+              value === "Pending"
                 ? "bg-yellow-100 text-yellow-700"
-                : value === "VOIDED"
-                  ? "bg-red-100 text-red-700"
-                  : "bg-green-100 text-green-700"
+                : "bg-green-100 text-green-700"
             }`}
           >
             {value}
@@ -278,7 +344,23 @@ export const Transactions = () => {
                 >
                   <Eye className="w-4 h-4" />
                   View
-                </button>
+              </button>
+                {getNextTransactionStatus(row.status) && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-green-600 hover:bg-gray-50 flex items-center gap-2"
+                    onClick={() => {
+                      setOpenMenuId(null);
+                      handleAdvanceTransaction(row.transaction_id);
+                    }}
+                    disabled={updatingPayableId === row.transaction_id}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {updatingPayableId === row.transaction_id
+                      ? "Updating..."
+                      : getPayableActionLabel(row.status)}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
@@ -294,7 +376,16 @@ export const Transactions = () => {
         truncate: false,
       },
     ],
-    [handleDeleteTransaction, handleViewTransaction, openMenuId],
+    [handleDeleteTransaction, handleViewTransaction, openMenuId, updatingPayableId],
+  );
+
+  const tableData = useMemo(
+    () =>
+      transactions.map((transaction) => ({
+        ...transaction,
+        display_status: getDisplayStatus(transaction.status),
+      })),
+    [transactions],
   );
 
   // Format values for KPI cards.
@@ -467,13 +558,16 @@ export const Transactions = () => {
                           {account.amount}
                         </p>
                         <button
+                          type="button"
+                          onClick={() => handleAdvanceTransaction(account.id)}
+                          disabled={account.disabled}
                           className={`mt-2 px-4 py-1 text-sm rounded ${
-                            account.status === "Approved"
-                              ? "bg-green-600 text-white"
+                            account.disabled
+                              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                               : "bg-green-600 text-white hover:bg-green-500"
                           }`}
                         >
-                          {account.status}
+                          {account.disabled ? "Updating..." : account.actionLabel}
                         </button>
                       </div>
                     </div>
@@ -490,22 +584,22 @@ export const Transactions = () => {
           <div className="w-full rounded-2xl py-4 px-5 bg-white border border-gray-100">
             <ReusableTable
               columns={tableColumns}
-              data={transactions}
+              data={tableData}
               heading="All Transaction Records"
               showToolbar
               showHeading
               showSearch
               showFilter
-              filterKey="status"
+              filterKey="display_status"
               filterOptions={[
-                { key: "status", value: "PENDING", label: "Pending" },
-                { key: "status", value: "COMPLETED", label: "Completed" },
+                { key: "display_status", value: "Pending", label: "Pending" },
+                { key: "display_status", value: "Completed", label: "Completed" },
               ]}
               searchKeys={[
                 "transaction_number",
                 "category",
                 "transaction_type",
-                "status",
+                "display_status",
               ]}
               serverPagination
               externalCurrentPage={currentPage}
@@ -551,9 +645,10 @@ export const Transactions = () => {
             </button>
             <button
               onClick={confirmDelete}
+              disabled={isDeletingTransaction}
               className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              Delete
+              {isDeletingTransaction ? 'Deleting...' : 'Delete'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

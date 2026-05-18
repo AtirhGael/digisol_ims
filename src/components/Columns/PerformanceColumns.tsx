@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, Download, Trash2, Star } from "lucide-react";
+import { Eye, Download, Trash2, Star, Pencil } from "lucide-react";
 import { FaEllipsisVertical } from "react-icons/fa6";
 
 interface CompletedRow {
@@ -18,15 +18,19 @@ function EvaluationActionMenu({
   openMenuId,
   onToggleMenu,
   onView,
+  onEdit,
   onDownload,
   onDelete,
+  showDelete = true,
 }: {
   rowId: string;
   openMenuId: string | null;
   onToggleMenu: (id: string | null) => void;
   onView: () => void;
+  onEdit?: () => void;
   onDownload: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  showDelete?: boolean;
 }) {
   const isOpen = openMenuId === rowId;
   return (
@@ -50,6 +54,15 @@ function EvaluationActionMenu({
           >
             <Eye size={15} /> View
           </button>
+          {onEdit && (
+            <button
+              type="button"
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
+              onClick={onEdit}
+            >
+              <Pencil size={15} /> Edit
+            </button>
+          )}
           <button
             type="button"
             className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
@@ -57,13 +70,15 @@ function EvaluationActionMenu({
           >
             <Download size={15} /> Download
           </button>
-          <button
-            type="button"
-            className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
-            onClick={onDelete}
-          >
-            <Trash2 size={15} /> Delete
-          </button>
+          {showDelete ? (
+            <button
+              type="button"
+              className="w-full px-4 py-2 text-left text-sm text-red-500 bg-transparent border-none cursor-pointer flex items-center gap-2 hover:bg-gray-50"
+              onClick={onDelete}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+          ) : null}
         </div>
       )}
     </div>
@@ -74,14 +89,18 @@ export const createCompletedEvaluationColumns = ({
   openMenuId,
   onToggleMenu,
   onView,
+  onEdit,
   onDownload,
   onDelete,
+  showDelete = true,
 }: {
   openMenuId: string | null;
   onToggleMenu: (id: string | null) => void;
   onView: (id: string) => void;
+  onEdit?: (id: string) => void;
   onDownload: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
+  showDelete?: boolean;
 }) => [
   {
     key: "name",
@@ -165,8 +184,10 @@ export const createCompletedEvaluationColumns = ({
         openMenuId={openMenuId}
         onToggleMenu={onToggleMenu}
         onView={() => onView(row.id)}
+        onEdit={onEdit ? () => onEdit(row.id) : undefined}
         onDownload={() => onDownload(row.id)}
-        onDelete={() => onDelete(row.id)}
+        onDelete={onDelete ? () => onDelete(row.id) : undefined}
+        showDelete={showDelete}
       />
     ),
   },

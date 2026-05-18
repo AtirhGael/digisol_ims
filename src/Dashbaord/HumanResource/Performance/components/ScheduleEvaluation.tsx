@@ -1,7 +1,10 @@
-import React, { useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { ArrowLeft, Plus, Search, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { pendingEvaluations } from "../data";
+import { useFetchHook } from "../../../../Hooks/UseFetchHook";
+import usePost from "../../../../Hooks/UsePostHook";
+import type { HrEvaluationPeriod } from "../../hrApi";
 import type { PendingEvaluation } from "../data";
 
 const inputCls =
@@ -23,18 +26,105 @@ function SectionCard({
 }
 
 interface ScheduleEvaluationProps {
+  employeeOptions: PendingEvaluation[];
   onBack: () => void;
+  onSaved?: () => void;
 }
 
-export const ScheduleEvaluation: React.FC<ScheduleEvaluationProps> = ({ onBack }) => {
+export const ScheduleEvaluation: React.FC<ScheduleEvaluationProps> = ({ employeeOptions, onBack, onSaved }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<PendingEvaluation | null>(null);
   const [evaluationType, setEvaluationType] = useState<"Quarterly" | "Annual">("Quarterly");
   const [scheduledDate, setScheduledDate] = useState("");
-  const [period, setPeriod] = useState("");
+  const [selectedPeriodId, setSelectedPeriodId] = useState("");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showNewPeriod, setShowNewPeriod] = useState(false);
+  const [newPeriodName, setNewPeriodName] = useState("");
+  const [newPeriodStart, setNewPeriodStart] = useState("");
+  const [newPeriodEnd, setNewPeriodEnd] = useState("");
 
-  const filtered = pendingEvaluations.filter(
+  const { data: periodsData, isLoading: periodsLoading, refetch: refetchPeriods } = useFetchHook<{
+    success: boolean; message: string; data: HrEvaluationPeriod[];
+  }>('/evaluation-periods', 'hr-evaluation-periods-schedule');
+  const periods: HrEvaluationPeriod[] = periodsData?.data ?? [];
+
+  const { postData, loading: creatingPeriod } = usePost();
+
+  const handleCreatePeriod = async () => {
+    if (!newPeriodName.trim()) {
+      toast.error("Period name is required.");
+      return;
+    }
+    if (!newPeriodStart || !newPeriodEnd) {
+      toast.error("Start and end dates are required.");
+      return;
+    }
+    if (newPeriodEnd < newPeriodStart) {
+      toast.error("End date must be after start date.");
+      return;
+    }
+    try {
+      const res = await postData('/evaluation-periods', {
+        period_name: newPeriodName.trim(),
+        start_date: newPeriodStart,
+        end_date: newPeriodEnd,
+      });
+      const created: HrEvaluationPeriod = res.data;
+      setSelectedPeriodId(created.period_id);
+      setShowNewPeriod(false);
+      setNewPeriodName("");
+      setNewPeriodStart("");
+      setNewPeriodEnd("");
+      refetchPeriods();
+      toast.success("Evaluation period created.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create evaluation period.");
+    }
+  };
+
+  const selectedPeriod = periods.find((p) => p.period_id === selectedPeriodId) ?? null;
+
+  const handleSchedule = async () => {
+    if (!selectedEmployee) {
+      toast.error("Please select an employee.");
+      return;
+    }
+    if (!selectedPeriodId) {
+      toast.error("Please select an evaluation period.");
+      return;
+    }
+    if (!scheduledDate) {
+      toast.error("Please select a scheduled date.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await postData('/evaluations', {
+        employee_id: selectedEmployee.id,
+        period_id: selectedPeriodId,
+        comments: [
+          `Type: ${evaluationType}`,
+          `Scheduled Date: ${scheduledDate}`,
+          notes.trim() && `Notes: ${notes.trim()}`,
+        ]
+          .filter(Boolean)
+          .join("\n") || undefined,
+        status: "DRAFT",
+      });
+      toast.success("Evaluation scheduled successfully.");
+      setTimeout(() => {
+        onSaved?.();
+      }, 100);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to schedule evaluation.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = employeeOptions.filter(
     (e) =>
       e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -169,16 +259,80 @@ export const ScheduleEvaluation: React.FC<ScheduleEvaluationProps> = ({ onBack }
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className={labelCls}>
-                    Evaluation Period <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Q4 2025"
-                    className={inputCls}
-                    value={period}
-                    onChange={(e) => setPeriod(e.target.value)}
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelCls + " mb-0"}>
+                      Evaluation Period <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPeriod((v) => !v)}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      {showNewPeriod ? (
+                        <><X size={12} /> Cancel</>
+                      ) : (
+                        <><Plus size={12} /> New period</>
+                      )}
+                    </button>
+                  </div>
+
+                  {showNewPeriod ? (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Period name (e.g. Q2 2026)"
+                        className={inputCls}
+                        value={newPeriodName}
+                        onChange={(e) => setNewPeriodName(e.target.value)}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Start date</label>
+                          <input
+                            type="date"
+                            className={inputCls}
+                            value={newPeriodStart}
+                            onChange={(e) => setNewPeriodStart(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">End date</label>
+                          <input
+                            type="date"
+                            className={inputCls}
+                            value={newPeriodEnd}
+                            onChange={(e) => setNewPeriodEnd(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleCreatePeriod}
+                        disabled={creatingPeriod}
+                        loading={creatingPeriod}
+                        className="w-full gap-1"
+                      >
+                        {creatingPeriod ? "Creating..." : "Create & select"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <select
+                      className={inputCls}
+                      value={selectedPeriodId}
+                      onChange={(e) => setSelectedPeriodId(e.target.value)}
+                      disabled={periodsLoading}
+                    >
+                      <option value="">
+                        {periodsLoading ? "Loading periods..." : periods.length === 0 ? "No periods — create one →" : "Select a period"}
+                      </option>
+                      {periods.map((p) => (
+                        <option key={p.period_id} value={p.period_id}>
+                          {p.period_name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
               <div className="space-y-1">
@@ -205,10 +359,12 @@ export const ScheduleEvaluation: React.FC<ScheduleEvaluationProps> = ({ onBack }
             </div>
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-              <Button variant="outline" onClick={onBack}>
+              <Button variant="outline" onClick={onBack} disabled={saving}>
                 Cancel
               </Button>
-              <Button>Schedule Evaluation</Button>
+              <Button onClick={handleSchedule} disabled={saving} loading={saving} className="gap-2">
+                Schedule Evaluation
+              </Button>
             </div>
           </SectionCard>
         </div>
@@ -240,7 +396,7 @@ export const ScheduleEvaluation: React.FC<ScheduleEvaluationProps> = ({ onBack }
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Period</span>
-                  <span className="font-medium text-gray-800">{period || "—"}</span>
+                  <span className="font-medium text-gray-800">{selectedPeriod?.period_name ?? "—"}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Date</span>

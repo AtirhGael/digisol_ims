@@ -1,42 +1,97 @@
 import React from "react";
+import type { HrDepartment } from "../../hrApi";
 
-const EmploymentTab: React.FC = () => {
+interface EmploymentValues {
+  employment_type: string;
+  start_date: string;
+  department_id: string;
+  position: string;
+  manager_id: string;
+}
+
+interface EmploymentTabProps {
+  values: EmploymentValues;
+  errors: Partial<Record<keyof EmploymentValues, string>>;
+  departments: HrDepartment[];
+  departmentsLoading: boolean;
+  onFieldChange: (field: keyof EmploymentValues, value: string) => void;
+}
+
+const inputClassName =
+  "w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]";
+
+const EmploymentTab: React.FC<EmploymentTabProps> = ({
+  values,
+  errors,
+  departments,
+  departmentsLoading,
+  onFieldChange,
+}) => {
+  const renderError = (field: keyof EmploymentValues) =>
+    errors[field] ? <p className="mt-1 text-xs text-red-500">{errors[field]}</p> : null;
+
   return (
     <div className="space-y-6 p-4">
       <h2 className="text-xl font-bold mb-6">Employment Information</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
-            Employment Type
+            Employment Type<span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]"
-          />
+          <select
+            className={`${inputClassName} appearance-none bg-white`}
+            value={values.employment_type}
+            onChange={(event) =>
+              onFieldChange("employment_type", event.target.value)
+            }
+          >
+            <option value="">Select employment type</option>
+            <option value="FULL_TIME">Full Time</option>
+            <option value="PART_TIME">Part Time</option>
+            <option value="CONTRACT">Contract</option>
+          </select>
+          {renderError("employment_type")}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
             Start Date<span className="text-red-500">*</span>
           </label>
           <input
-            type="text"
-            placeholder="mm/dd/yy"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]"
+            type="date"
+            className={inputClassName}
+            value={values.start_date}
+            onChange={(event) => onFieldChange("start_date", event.target.value)}
             required
           />
+          {renderError("start_date")}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
             Department<span className="text-red-500">*</span>
           </label>
-          <select className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E] appearance-none bg-white" aria-label="Department" required>
-            <option value="">Select gender</option>
-            <option value="Development">Development</option>
-            <option value="Finance">Finance</option>
-            <option value="HR">HR</option>
-            <option value="Sales">Sales</option>
-            <option value="Operations">Operations</option>
+          <select
+            className={`${inputClassName} appearance-none bg-white`}
+            aria-label="Department"
+            required
+            value={values.department_id}
+            onChange={(event) =>
+              onFieldChange("department_id", event.target.value)
+            }
+            disabled={departmentsLoading}
+          >
+            <option value="">
+              {departmentsLoading ? "Loading departments..." : "Select department"}
+            </option>
+            {departments.map((department) => (
+              <option
+                key={department.department_id}
+                value={department.department_id}
+              >
+                {department.department_name}
+              </option>
+            ))}
           </select>
+          {renderError("department_id")}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
@@ -44,60 +99,31 @@ const EmploymentTab: React.FC = () => {
           </label>
           <input
             type="text"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]"
+            className={inputClassName}
+            value={values.position}
+            onChange={(event) => onFieldChange("position", event.target.value)}
             required
           />
+          {renderError("position")}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-900 mb-2">
-            Reporting Manager
-          </label>
-          <select className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E] appearance-none bg-white" aria-label="Reporting Manager">
-            <option value="">Select manager</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">
-            Work Location<span className="text-red-500">*</span>
-          </label>
-          <select className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E] appearance-none bg-white" aria-label="Work Location" required>
-            <option value="">Select location</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">
-            Employment Status<span className="text-red-500">*</span>
-          </label>
-          <select className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E] appearance-none bg-white" aria-label="Employment Status" required>
-            <option value="">Select status</option>
-            <option value="Active">Active</option>
-            <option value="On Leave">On Leave</option>
-            <option value="Probation">Probation</option>
-            <option value="Terminated">Terminated</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-2">
-            Probation End Date
+            Manager / Supervisor
           </label>
           <input
             type="text"
-            placeholder="mm/dd/yy"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]"
+            placeholder="Enter manager name or employee ID"
+            className={inputClassName}
+            value={values.manager_id}
+            onChange={(event) => onFieldChange("manager_id", event.target.value)}
           />
+          {renderError("manager_id")}
         </div>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-900 mb-2">
-          Work Email<span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          placeholder="@digisol.com"
-          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#42417E]"
-          required
-        />
-        <span className="text-xs text-gray-500 mt-1 block">Suggested: @digisol.com</span>
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+        The employee account will be created automatically and the temporary
+        password will be emailed to the work email entered in the personal
+        information step.
       </div>
     </div>
   );

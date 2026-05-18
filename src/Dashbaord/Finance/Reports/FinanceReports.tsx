@@ -21,14 +21,68 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getBudgetUtilization, type Budget } from '../financeApi'
+import { getBudgetUtilization, type Budget, type DashboardResponse } from '../financeApi'
 import useFetchHook from '../../../Hooks/UseFetchHook'
 
 type BudgetHealthRow = {
+  id: string
   name: string
   budget: number
   spent: number
   utilization: number
+  remaining: number
+  budgetCount: number
+}
+
+type DashboardData = DashboardResponse['data']
+
+type BudgetListResponse = {
+  data?: Budget[]
+  budgets?: Budget[]
+  result?: Budget[]
+  success?: boolean
+}
+
+type Department = {
+  department_id: string
+  department_name: string
+}
+
+type DepartmentListResponse = {
+  data?: Department[]
+  departments?: Department[]
+  success?: boolean
+}
+
+const normalizeDashboardData = (response?: DashboardResponse | DashboardData | null): DashboardData | null => {
+  if (!response) return null
+
+  if ('summary' in response) {
+    return response
+  }
+
+  if ('data' in response && response.data) {
+    return response.data
+  }
+
+  return null
+}
+
+const normalizeBudgetList = (response?: BudgetListResponse | Budget[] | null): Budget[] => {
+  if (!response) return []
+  if (Array.isArray(response)) return response
+  if (Array.isArray(response.data)) return response.data
+  if (Array.isArray(response.budgets)) return response.budgets
+  if (Array.isArray(response.result)) return response.result
+  return []
+}
+
+const normalizeDepartmentList = (response?: DepartmentListResponse | Department[] | null): Department[] => {
+  if (!response) return []
+  if (Array.isArray(response)) return response
+  if (Array.isArray(response.data)) return response.data
+  if (Array.isArray(response.departments)) return response.departments
+  return []
 }
 
 const formatCurrency = (value: number, currency = 'XAF') =>
@@ -62,7 +116,7 @@ export const FinanceReports = () => {
     isError: isDashboardError,
     error: dashboardError,
     refetch: refetchDashboard,
-  } = useFetchHook<any>('/finance/dashboard', 'finance-dashboard-report')
+  } = useFetchHook<DashboardResponse | DashboardData>('/finance/dashboard', 'finance-dashboard-report')
 
   const {
     data: budgetsResponse,
@@ -70,13 +124,34 @@ export const FinanceReports = () => {
     isError: isBudgetsError,
     error: budgetsError,
     refetch: refetchBudgets,
-  } = useFetchHook<{ data: Budget[] }>('/finance/budgets?page=1&page_size=10', 'finance-budgets-report')
+  } = useFetchHook<BudgetListResponse | Budget[]>(
+    '/finance/budgets?page=1&page_size=100',
+    'finance-budgets-report',
+    { refetchOnWindowFocus: true, staleTime: 0 }
+  )
 
-  const dashboardData = dashboardResponse?.data ?? null
+  const {
+    data: departmentsResponse,
+    isLoading: isDepartmentsLoading,
+    isError: isDepartmentsError,
+    error: departmentsError,
+    refetch: refetchDepartments,
+  } = useFetchHook<DepartmentListResponse | Department[]>('/users/departments', 'finance-report-departments')
 
-  // Build budget rows with utilization once budgets load.
+  const dashboardData = useMemo(() => normalizeDashboardData(dashboardResponse), [dashboardResponse])
+  const budgets = useMemo(() => normalizeBudgetList(budgetsResponse), [budgetsResponse])
+  const departments = useMemo(() => normalizeDepartmentList(departmentsResponse), [departmentsResponse])
+  const activeBudgets = useMemo(
+    () => budgets.filter((budget) => (budget.status || '').toUpperCase() !== 'CLOSED'),
+    [budgets]
+  )
+  const departmentNameById = useMemo(() => {
+    return new Map(departments.map((department) => [department.department_id, department.department_name]))
+  }, [departments])
+
+  // Build department rows from the departments API, then enrich them with budget utilization.
   useEffect(() => {
-    if (!budgetsResponse?.data) {
+    if (!activeBudgets.length) {
       setDepartmentRows([])
       setIsUtilizationLoading(false)
       return
@@ -85,28 +160,49 @@ export const FinanceReports = () => {
     let isMounted = true
     const loadUtilization = async () => {
       setIsUtilizationLoading(true)
-      const limitedBudgets = budgetsResponse.data.slice(0, 5)
       const utilizationResults = await Promise.all(
-        limitedBudgets.map((budget) =>
+        activeBudgets.map((budget) =>
           getBudgetUtilization(budget.budget_id).catch(() => null)
         )
       )
 
       if (!isMounted) return
 
-      const mappedRows = limitedBudgets.map((budget, index) => {
+      const rowsByDepartment = new Map<string, BudgetHealthRow>()
+
+      activeBudgets.forEach((budget, index) => {
         const utilization = utilizationResults[index]
-        return {
-          name:
-            utilization?.department_name ||
-            budget.department_name ||
-            budget.department?.department_name ||
-            'Department',
-          budget: utilization?.total_allocated ?? budget.total_amount ?? 0,
-          spent: utilization?.total_spent ?? 0,
-          utilization: utilization?.utilization_percentage ?? 0,
-        }
+        const departmentId =
+          budget.department_id ||
+          budget.department?.department_id ||
+          budget.budget_id
+        const existing = rowsByDepartment.get(departmentId)
+        const allocated = utilization?.total_allocated ?? budget.total_amount ?? 0
+        const spent = utilization?.total_spent ?? 0
+        const remaining = utilization?.remaining ?? Math.max(allocated - spent, 0)
+        const name =
+          utilization?.department_name ||
+          budget.department_name ||
+          budget.department?.department_name ||
+          departmentNameById.get(departmentId) ||
+          existing?.name ||
+          'Department'
+
+        rowsByDepartment.set(departmentId, {
+          id: departmentId,
+          name,
+          budget: (existing?.budget ?? 0) + allocated,
+          spent: (existing?.spent ?? 0) + spent,
+          remaining: (existing?.remaining ?? 0) + remaining,
+          utilization: 0,
+          budgetCount: (existing?.budgetCount ?? 0) + 1,
+        })
       })
+
+      const mappedRows = Array.from(rowsByDepartment.values()).map((row) => ({
+        ...row,
+        utilization: row.budget > 0 ? Math.round((row.spent / row.budget) * 1000) / 10 : 0,
+      }))
 
       setDepartmentRows(mappedRows)
       setIsUtilizationLoading(false)
@@ -116,16 +212,29 @@ export const FinanceReports = () => {
     return () => {
       isMounted = false
     }
-  }, [budgetsResponse?.data])
+  }, [activeBudgets, departmentNameById])
 
-  // KPI summary cards from dashboard data.
-  const kpis = useMemo(() => {
+  const reportStats = useMemo(() => {
     const summary = dashboardData?.summary
-    if (!summary) return []
+    const totalBudget = activeBudgets.reduce((sum, budget) => sum + Number(budget.total_amount || 0), 0)
+    const totalBudgetSpent = departmentRows.reduce((sum, row) => sum + row.spent, 0)
 
-    const monthlyIncome = summary.monthly_income ?? 0
-    const monthlyExpense = summary.monthly_expense ?? 0
-    const totalBalance = summary.total_balance ?? 0
+    return {
+      monthlyIncome: summary?.monthly_income ?? 0,
+      monthlyExpense: summary?.monthly_expense ?? 0,
+      pendingApprovals: summary?.pending_approvals ?? 0,
+      totalBudget,
+      totalBudgetSpent,
+      remainingBudget: departmentRows.length
+        ? departmentRows.reduce((sum, row) => sum + row.remaining, 0)
+        : Math.max(totalBudget - totalBudgetSpent, 0),
+    }
+  }, [activeBudgets, dashboardData, departmentRows])
+
+  // KPI summary cards from live finance dashboard and budget utilization endpoints.
+  const kpis = useMemo(() => {
+    const monthlyIncome = reportStats.monthlyIncome
+    const monthlyExpense = reportStats.monthlyExpense
     const operatingProfit = monthlyIncome - monthlyExpense
     const netCashFlow = monthlyIncome - monthlyExpense
     const currency = 'XAF'
@@ -136,7 +245,7 @@ export const FinanceReports = () => {
         value: formatCompact(monthlyIncome, currency),
         change: 'Live',
         trend: 'up',
-        note: 'last 30 days',
+        note: 'dashboard endpoint',
         icon: LineChart,
       },
       {
@@ -144,7 +253,7 @@ export const FinanceReports = () => {
         value: formatCompact(operatingProfit, currency),
         change: 'Live',
         trend: operatingProfit >= 0 ? 'up' : 'down',
-        note: 'monthly close',
+        note: 'dashboard endpoint',
         icon: TrendingUp,
       },
       {
@@ -152,7 +261,23 @@ export const FinanceReports = () => {
         value: formatCompact(monthlyExpense, currency),
         change: 'Live',
         trend: 'down',
-        note: 'cost controls',
+        note: 'dashboard endpoint',
+        icon: Wallet,
+      },
+      {
+        title: 'Budget Allocated',
+        value: formatCompact(reportStats.totalBudget, currency),
+        change: 'Live',
+        trend: 'up',
+        note: '/finance/budgets',
+        icon: BarChart3,
+      },
+      {
+        title: 'Remaining Budget',
+        value: formatCompact(reportStats.remainingBudget, currency),
+        change: 'Live',
+        trend: 'up',
+        note: 'budget utilization',
         icon: Wallet,
       },
       {
@@ -160,19 +285,11 @@ export const FinanceReports = () => {
         value: formatCompact(netCashFlow, currency),
         change: 'Live',
         trend: netCashFlow >= 0 ? 'up' : 'down',
-        note: 'vs last month',
+        note: '/finance/dashboard',
         icon: BarChart3,
       },
-      {
-        title: 'Total Balance',
-        value: formatCompact(totalBalance, currency),
-        change: 'Live',
-        trend: 'up',
-        note: 'cash on hand',
-        icon: Wallet,
-      },
     ]
-  }, [dashboardData])
+  }, [reportStats])
 
   // Spend composition chart data from backend distributions.
   const spendCompositionChartData = useMemo(() => {
@@ -206,7 +323,7 @@ export const FinanceReports = () => {
   const departmentOptions = useMemo(
     () => [
       { value: 'all', label: 'All Departments' },
-      ...departmentRows.map((row) => ({ value: row.name, label: row.name })),
+      ...departmentRows.map((row) => ({ value: row.id, label: row.name })),
     ],
     [departmentRows]
   )
@@ -216,8 +333,13 @@ export const FinanceReports = () => {
     if (departmentFilter === 'all') {
       return departmentRows
     }
-    return departmentRows.filter((row) => row.name === departmentFilter)
+    return departmentRows.filter((row) => row.id === departmentFilter)
   }, [departmentFilter, departmentRows])
+
+  const selectedDepartmentName =
+    departmentFilter === 'all'
+      ? 'All Departments'
+      : departmentRows.find((row) => row.id === departmentFilter)?.name || departmentFilter
 
   // Cash flow range options for the dropdown.
   const cashFlowRangeOptions = [
@@ -258,8 +380,8 @@ export const FinanceReports = () => {
   const cashFlowChartConfig = useMemo(
     () =>
       ({
-        income: { label: 'Income', color: '#6366F1' },
-        expense: { label: 'Expenses', color: '#F43F5E' },
+        income: { label: 'Income', color: '#16A34A' },
+        expense: { label: 'Expense', color: '#DC2626' },
       }) satisfies ChartConfig,
     []
   )
@@ -272,29 +394,48 @@ export const FinanceReports = () => {
         ? 'Income vs Expense (last 1 year)'
         : 'Income vs Expense (last 6 months)'
 
-  const reportHighlights = useMemo(
-    () => [
+  const reportHighlights = useMemo(() => {
+    const exceededDepartments = departmentRows.filter((row) => row.utilization > 100)
+    const criticalDepartments = departmentRows.filter((row) => row.utilization >= 95 && row.utilization <= 100)
+    const watchDepartments = departmentRows.filter((row) => row.utilization >= 90)
+    const highestUtilization = departmentRows.reduce(
+      (highest, row) => Math.max(highest, row.utilization),
+      0
+    )
+
+    return [
       {
         title: 'Pending Approvals',
-        value: `${dashboardData?.summary?.pending_approvals ?? 0}`,
-        detail: 'Awaiting review',
+        value: `${reportStats.pendingApprovals}`,
+        detail: 'from /finance/dashboard',
         icon: BadgeCheck,
       },
       {
         title: 'Pending Invoices',
         value: `${dashboardData?.pending_invoices?.length ?? 0}`,
-        detail: 'Open invoices',
+        detail: 'from /finance/dashboard',
         icon: FileText,
       },
       {
         title: 'Variance Watch',
-        value: `${departmentRows.filter((row) => row.utilization >= 90).length} departments`,
+        value: `${watchDepartments.length} departments`,
         detail: 'over 90% budget',
         icon: PieChart,
       },
-    ],
-    [dashboardData, departmentRows]
-  )
+      {
+        title: 'Budget Exceeded',
+        value: `${exceededDepartments.length} departments`,
+        detail: 'over 100% utilization',
+        icon: TrendingUp,
+      },
+      {
+        title: 'Critical Budget',
+        value: `${criticalDepartments.length} departments`,
+        detail: `highest utilization ${Math.round(highestUtilization)}%`,
+        icon: TrendingDown,
+      },
+    ]
+  }, [dashboardData, departmentRows, reportStats.pendingApprovals])
 
   // Format ISO date strings into friendly labels.
   const formatDate = (value: string) => {
@@ -377,7 +518,7 @@ export const FinanceReports = () => {
         <body>
           <h1>Finance Report</h1>
           <div class="meta">Report Range: ${formatDate(startDate)} - ${formatDate(endDate)}</div>
-          <div class="meta">Department: ${departmentFilter === 'all' ? 'All Departments' : departmentFilter}</div>
+          <div class="meta">Department: ${selectedDepartmentName}</div>
 
           <h2>KPIs</h2>
           <table>
@@ -472,7 +613,7 @@ export const FinanceReports = () => {
     const fileSuffix =
       departmentFilter === 'all'
         ? 'all-departments'
-        : departmentFilter.toLowerCase().replace(/\s+/g, '-')
+        : selectedDepartmentName.toLowerCase().replace(/\s+/g, '-')
     const fileNameBase = `finance-report-${startDate}-to-${endDate}-${fileSuffix}`
 
     if (exportFormat === 'pdf') {
@@ -494,10 +635,11 @@ export const FinanceReports = () => {
     window.URL.revokeObjectURL(url)
   }
 
-  const isLoading = isDashboardLoading || isBudgetsLoading || isUtilizationLoading
+  const isLoading = isDashboardLoading && !dashboardData
   const loadError =
     (dashboardError as any)?.response?.data?.message ||
     (budgetsError as any)?.response?.data?.message ||
+    (departmentsError as any)?.response?.data?.message ||
     null
 
   if (isLoading) {
@@ -506,7 +648,7 @@ export const FinanceReports = () => {
 
   return (
     <div className="space-y-6">
-      {(isDashboardError || isBudgetsError) && loadError && (
+      {(isDashboardError || isBudgetsError || isDepartmentsError) && loadError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {loadError}
           <button
@@ -515,6 +657,7 @@ export const FinanceReports = () => {
             onClick={() => {
               refetchDashboard()
               refetchBudgets()
+              refetchDepartments()
             }}
           >
             Retry
@@ -703,7 +846,13 @@ export const FinanceReports = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredDepartmentRows.length === 0 ? (
+                {(isBudgetsLoading || isDepartmentsLoading || isUtilizationLoading) ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                      Loading budget data...
+                    </td>
+                  </tr>
+                ) : filteredDepartmentRows.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
                       No budget data available yet.
@@ -711,7 +860,7 @@ export const FinanceReports = () => {
                   </tr>
                 ) : (
                   filteredDepartmentRows.map((row) => (
-                    <tr key={row.name} className="text-slate-600">
+                    <tr key={row.id} className="text-slate-600">
                       <td className="px-4 py-3 font-medium text-slate-800">{row.name}</td>
                       <td className="px-4 py-3">{formatCurrency(row.budget)}</td>
                       <td className="px-4 py-3">{formatCurrency(row.spent)}</td>

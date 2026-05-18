@@ -153,3 +153,43 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Mobile performance optimizations ──────────────────────────────────── */
+/* Remove the 300ms tap-delay on mobile browsers */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* Hardware-accelerate sidebar and main content so CSS transforms/transitions
+   are composited on the GPU instead of the main thread */
+aside,
+.sidebar,
+[data-sidebar],
+main {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Speed up interactive transitions project-wide on mobile */
+@media (max-width: 768px) {
+  * {
+    transition-duration: 100ms !important;
+  }
+
+  /* But never animate layout-affecting properties on mobile */
+  .transition-all {
+    transition-property: color, background-color, border-color, opacity,
+      box-shadow, transform !important;
+  }
+}

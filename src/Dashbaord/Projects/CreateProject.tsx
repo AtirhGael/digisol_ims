@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '../../components/ui/button';
+import { Button } from '../../components/ui/Button';
 
 // Note: Import this component in your Projects.tsx file
 

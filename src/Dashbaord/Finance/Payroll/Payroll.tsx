@@ -27,6 +27,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { type PayrollRecordApi } from "../financeApi";
 import useFetchHook from "../../../Hooks/UseFetchHook";
+import useDeleteHook from "../../../Hooks/UseDeleteHook";
 import { useUserStore } from "../../../Store/UserStore";
 
 // Row actions menu (View/Edit/Delete) with absolute positioning.
@@ -146,7 +147,7 @@ type PayrollRow = {
   name: string;
   department: string;
   payDate: string;
-  basicSalary: string;
+  baseSalary: string;
   bonuses: string;
   totalSalary: string;
   status: string;
@@ -165,11 +166,8 @@ const formatCompact = (value: number) =>
     maximumFractionDigits: 1,
   }).format(value || 0);
 
-const statusLabelMap: Record<PayrollRecordApi["status"], string> = {
-  PENDING: "Pending",
-  PAID: "Paid",
-  PARTIALLY_PAID: "Partially Paid",
-};
+const getPayrollStatusLabel = (status: PayrollRecordApi["status"] | string) =>
+  status === "PAID" ? "PAID" : "UNPAID";
 
 export const Payroll = () => {
   // Navigation + table search.
@@ -193,8 +191,8 @@ export const Payroll = () => {
   // Delete dialog state.
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const {
     data: payrollResponse,
@@ -203,8 +201,13 @@ export const Payroll = () => {
     error,
     refetch,
   } = useFetchHook<{ data: PayrollRecordApi[] }>(
-    "/payroll?page=1&page_size=10",
+    "/payroll?page=1&page_size=100",
     "finance-payroll",
+    { refetchOnWindowFocus: true, staleTime: 0 },
+  );
+  const { mutateAsync: deletePayroll } = useDeleteHook(
+    "/payroll",
+    ["finance-payroll"],
   );
 
   useEffect(() => {
@@ -216,11 +219,9 @@ export const Payroll = () => {
   // Status badge color helper.
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Pending":
-        return "text-yellow-600 bg-yellow-50";
-      case "Paid":
+      case "PAID":
         return "text-green-600 bg-green-50";
-      case "Partially Paid":
+      case "UNPAID":
         return "text-red-600 bg-red-50";
       default:
         return "text-gray-600 bg-gray-50";
@@ -242,20 +243,36 @@ export const Payroll = () => {
 
   // Open delete confirmation.
   const handleDeletePayroll = (id: string) => {
+    if (!checkPermission("DELETE")) {
+      navigate("/dashboard/unauthorized");
+      return;
+    }
     setDeleteId(id);
     setDeleteModalOpen(true);
   };
 
-  // Confirm delete action.
-  const confirmDelete = () => {
+  const confirmDeleteAsync = async () => {
     if (!deleteId || isDeleting) return;
     setIsDeleting(true);
     setDeleteError(null);
-    // Backend does not expose a delete endpoint for payroll.
-    const message = "Delete is not available for payroll records yet.";
-    setDeleteError(message);
-    toast.error(message);
-    setIsDeleting(false);
+    try {
+      await deletePayroll(deleteId);
+      setPayrollRecords((prev) =>
+        prev.filter((record) => record.record_id !== deleteId),
+      );
+      toast.success("Payroll record deleted successfully.");
+      setDeleteModalOpen(false);
+      setDeleteId(null);
+      await refetch();
+    } catch (deleteErr: any) {
+      const message =
+        deleteErr?.response?.data?.message ||
+        "Failed to delete payroll record.";
+      setDeleteError(message);
+      toast.error(message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Cancel delete dialog.
@@ -277,13 +294,13 @@ export const Payroll = () => {
         payDate: record.pay_date
           ? new Date(record.pay_date).toLocaleDateString("en-US")
           : "N/A",
-        basicSalary: formatCurrency(record.gross_salary || 0, currency),
+        baseSalary: formatCurrency(record.gross_salary || 0, currency),
         bonuses: formatCurrency(record.bonuses || 0, currency),
         totalSalary: formatCurrency(
           record.net_salary || record.gross_salary || 0,
           currency,
         ),
-        status: statusLabelMap[record.status] || record.status,
+        status: getPayrollStatusLabel(record.status),
       };
     });
   }, [payrollRecords]);
@@ -295,26 +312,18 @@ export const Payroll = () => {
       record.status.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Monthly stats based on the payroll records.
+  // Summary stats based on the fetched payroll records.
   const { totalPayroll, totalEmployeesPaid, averageSalary } = useMemo(() => {
-    const now = new Date();
-    const monthRecords = payrollRecords.filter((record) => {
-      if (!record.pay_date) return false;
-      const payDate = new Date(record.pay_date);
-      return (
-        payDate.getMonth() === now.getMonth() &&
-        payDate.getFullYear() === now.getFullYear()
-      );
-    });
-
-    const total = monthRecords.reduce(
+    const total = payrollRecords.reduce(
       (sum, record) => sum + (record.net_salary || 0),
       0,
     );
     const uniqueEmployees = new Set(
-      monthRecords.map((record) => record.employee_id),
+      payrollRecords
+        .filter((record) => getPayrollStatusLabel(record.status) === "PAID")
+        .map((record) => record.employee_id),
     ).size;
-    const average = monthRecords.length ? total / monthRecords.length : 0;
+    const average = payrollRecords.length ? total / payrollRecords.length : 0;
 
     return {
       totalPayroll: total,
@@ -438,8 +447,8 @@ export const Payroll = () => {
       ),
     },
     {
-      key: "basicSalary",
-      header: "Basic Salary",
+      key: "baseSalary",
+      header: "Base Salary",
       render: (value: string) => (
         <span className="text-sm text-gray-700">{value}</span>
       ),
@@ -541,7 +550,7 @@ export const Payroll = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card
-          heading="Total Payroll This Month"
+          heading="Total Payroll"
           amount={formatCompact(totalPayroll)}
           currency="XAF, based on payroll records"
           icons={<FaMoneyBillWave />}
@@ -558,7 +567,7 @@ export const Payroll = () => {
         <Card
           heading="Total Employees Paid"
           amount={totalEmployeesPaid.toString()}
-          currency="Employees paid this month"
+          currency="Employees marked paid"
           icons={<FaUsers />}
           iconBackgroundColor="#f3f4f6"
           iconClassName="text-gray-600"
@@ -628,8 +637,8 @@ export const Payroll = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Payroll</AlertDialogTitle>
             <AlertDialogDescription>
-              Deleting payroll records is not currently supported by the
-              backend.
+              Are you sure you want to delete this payroll record? This action
+              cannot be undone.
             </AlertDialogDescription>
             {deleteError && (
               <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
@@ -646,10 +655,10 @@ export const Payroll = () => {
               Cancel
             </button>
             <button
-              onClick={confirmDelete}
-              disabled={isDeleting}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white  hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
-            >
+            onClick={confirmDeleteAsync}
+            disabled={isDeleting}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white  hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
+          >
               {isDeleting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />

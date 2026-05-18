@@ -30,11 +30,15 @@ export const useUpdate = <T>() => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const updateData = async (url: string, body: any) => {
+  const updateData = async (
+    url: string,
+    body: any,
+    method: 'put' | 'patch' = 'put'
+  ) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.put(url, body);
+      const response = await apiClient[method](url, body);
 
       setData(response.data);
       return response.data;

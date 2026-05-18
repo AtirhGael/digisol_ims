@@ -102,6 +102,13 @@ export const createDepartmentColumns = ({
     return "Not assigned";
   };
 
+  const getLeadName = (department: Department): string => {
+    if (department.team_lead) {
+      return `${department.team_lead.first_name} ${department.team_lead.last_name}`;
+    }
+    return "Not assigned";
+  };
+
   return [
     {
       key: "name",
@@ -121,9 +128,16 @@ export const createDepartmentColumns = ({
     },
     {
       key: "department_head",
-      header: "Lead",
+      header: "Manager",
       render: (_: any, row: Department) => (
         <span className="text-sm text-gray-700">{getManagerName(row)}</span>
+      ),
+    },
+    {
+      key: "team_lead",
+      header: "Lead",
+      render: (_: any, row: Department) => (
+        <span className="text-sm text-gray-700">{getLeadName(row)}</span>
       ),
     },
     {

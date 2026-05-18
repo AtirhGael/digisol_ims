@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { CustomSelect } from '../../../components/ui/CustomSelect';
 import { FaLandmark, FaFileInvoice, FaCartShopping, FaBullhorn, FaMoneyCheckDollar } from 'react-icons/fa6';
-import { createTransaction } from '../financeApi';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
+import usePost from '../../../Hooks/UsePostHook';
+import { useDocumentUpload } from '../../../Hooks/useDocumentUpload';
+import useFetchHook from '../../../Hooks/UseFetchHook';
+import { Button } from '../../../components/ui/button';
 
 type TransactionCategory =
   | 'office-supply'
@@ -21,17 +25,28 @@ interface CategoryOption {
   apiCategory: string;
 }
 
+type DepartmentOption = {
+  department_id: string;
+  department_name: string;
+};
+
 export const AddTransaction = () => {
   // Navigation + form state.
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<TransactionCategory | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { postData, loading: isPostingTransaction } = usePost<any>();
+  const { uploadDocument, isUploading: isUploadingDocument } = useDocumentUpload();
+  const { data: departmentsData, isLoading: departmentsLoading } = useFetchHook(
+    '/users/departments',
+    'departments',
+  );
   const [formData, setFormData] = useState({
     transactionDate: '',
     amount: '',
     currency: 'XAF',
-    reportingCurrency: 'XAF',
     type: '',
     department: '',
     project: '',
@@ -45,6 +60,18 @@ export const AddTransaction = () => {
     'w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
   const sectionClass = 'rounded-xl bg-white p-5';
   const labelClass = 'mb-2 block text-xs font-semibold text-gray-500';
+  const isSaving = isLoading || isPostingTransaction || isUploadingDocument;
+  const departments: DepartmentOption[] = Array.isArray(departmentsData)
+    ? departmentsData
+    : departmentsData?.data || [];
+  const departmentOptions = useMemo(
+    () =>
+      departments.map((department) => ({
+        value: department.department_id,
+        label: department.department_name,
+      })),
+    [departments],
+  );
 
   // Category tiles mapped to API values.
   const categories: CategoryOption[] = [
@@ -122,6 +149,9 @@ export const AddTransaction = () => {
 
     try {
       const selectedCategoryData = categories.find(c => c.id === selectedCategory);
+      const supportingDocUrl = files[0]
+        ? await uploadDocument(files[0], { folder: 'finance/transactions' })
+        : undefined;
       
       const payload = {
         amount: numericAmount,
@@ -135,15 +165,16 @@ export const AddTransaction = () => {
         reference_number: formData.referenceNumber || undefined,
         department_id: isValidUuid(formData.department) ? formData.department : undefined,
         project_id: isValidUuid(formData.project) ? formData.project : undefined,
+        supporting_doc_url: supportingDocUrl,
       };
 
-      const response = await createTransaction(payload);
-
-      if (response.success) {
-        navigate('/dashboard/transactions');
-      } else {
-        setError(response.message || 'Failed to create transaction');
-      }
+      await postData('/finance/transactions', payload);
+      await queryClient.invalidateQueries({ queryKey: ['finance-transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['finance-budgets'] });
+      await queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+      queryClient.removeQueries({ queryKey: ['finance-transactions'] });
+      queryClient.removeQueries({ queryKey: ['finance-budgets'] });
+      navigate('/dashboard/transactions');
     } catch (err: any) {
       console.error('Error creating transaction:', err);
       const apiMessage = err.response?.data?.message;
@@ -162,7 +193,7 @@ export const AddTransaction = () => {
   };
 
   // Show a skeleton while the submission is in flight.
-  if (isLoading) {
+  if (departmentsLoading) {
     return <SkeletonLoading />
   }
 
@@ -250,18 +281,6 @@ export const AddTransaction = () => {
                 onChange={(value) => updateField('currency', value)}
               />
             </div>
-            <div>
-              <label className={labelClass}>Currency</label>
-              <CustomSelect
-                options={[
-                  { value: 'XAF', label: 'XAF' },
-                  { value: 'USD', label: 'USD' },
-                  { value: 'EUR', label: 'EUR' },
-                ]}
-                value={formData.reportingCurrency}
-                onChange={(value) => updateField('reportingCurrency', value)}
-              />
-            </div>
           </div>
         </div>
 
@@ -283,12 +302,7 @@ export const AddTransaction = () => {
             <div>
               <label className={labelClass}>Department</label>
               <CustomSelect
-                options={[
-                  { value: 'finance', label: 'Finance' },
-                  { value: 'hr', label: 'Human Resources' },
-                  { value: 'it', label: 'IT' },
-                  { value: 'operations', label: 'Operations' },
-                ]}
+                options={departmentOptions}
                 value={formData.department}
                 onChange={(value) => updateField('department', value)}
                 placeholder="Select department..."
@@ -427,18 +441,19 @@ export const AddTransaction = () => {
         <div className="flex justify-end gap-3">
           <button
             onClick={handleCancel}
-            disabled={isLoading}
+            disabled={isSaving}
             className="px-6 py-2 rounded-md border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSubmit}
-            disabled={isLoading}
+            disabled={isSaving}
+            loading={isSaving}
             className="px-6 py-2 rounded-md bg-primary text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
           >
             Record Transaction
-          </button>
+          </Button>
         </div>
       </div>
     </div>

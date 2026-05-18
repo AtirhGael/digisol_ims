@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../../components/other/Card';
 import ReusableTable from '../../../components/other/ReusableTable/ReusableTable';
 import SkeletonLoading from '../../../components/other/Loader/SkeletonLoading/SkeletonLoading';
-import { getBudgetUtilization, updateBudget, type Budget } from '../financeApi';
+import { getBudgetUtilization, type Budget } from '../financeApi';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../../components/ui/alert-dialog';
-import { MoreVertical, Eye, Trash2 } from 'lucide-react';
+import { MoreVertical, Eye, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   FaFileInvoice,
@@ -24,6 +24,7 @@ import {
   FaXmark,
 } from 'react-icons/fa6';
 import useFetchHook from '../../../Hooks/UseFetchHook';
+import useUpdate from '../../../Hooks/UseUpdateHook';
 
 type AlertSeverity = 'critical' | 'exceeded' | 'warning';
 
@@ -53,6 +54,7 @@ interface DepartmentBudget {
 interface DepartmentBudgetTableProps {
   budgets: DepartmentBudget[];
   onViewDetails?: (id: string) => void;
+  onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
 
@@ -133,6 +135,7 @@ const getUtilizationColor = (utilization: number) => {
 const DepartmentBudgetTable: React.FC<DepartmentBudgetTableProps> = ({
   budgets,
   onViewDetails,
+  onEdit,
   onDelete,
 }) => {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -222,6 +225,17 @@ const DepartmentBudgetTable: React.FC<DepartmentBudgetTableProps> = ({
               </button>
               <button
                 type="button"
+                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                onClick={() => {
+                  setOpenMenuId(null);
+                  onEdit?.(row.id);
+                }}
+              >
+                <Pencil className="w-4 h-4" />
+                Edit
+              </button>
+              <button
+                type="button"
                 className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50 flex items-center gap-2"
                 onClick={() => {
                   setOpenMenuId(null);
@@ -283,6 +297,7 @@ export const Budgeting = () => {
   // Table data held in state so rows can be updated locally.
   const [departmentBudgets, setDepartmentBudgets] = useState<DepartmentBudget[]>([]);
   const [isUtilizationLoading, setIsUtilizationLoading] = useState(false);
+  const { updateData, loading: isClosingBudget } = useUpdate<any>();
 
   const {
     data: budgetsResponse,
@@ -292,10 +307,20 @@ export const Budgeting = () => {
     refetch,
   } = useFetchHook<{ data: Budget[] }>(
     '/finance/budgets?page=1&page_size=50',
-    'finance-budgets'
+    'finance-budgets',
+    { refetchOnWindowFocus: true, staleTime: 0 }
   );
 
-  const formatCurrency = (value: number) => `${value.toLocaleString()} FCFA`;
+  const formatCurrency = (amount: number): string => {
+    if (amount >= 1000000) {
+      return `${(amount / 1000000).toFixed(1)}M`;
+    } else if (amount >= 1000) {
+      return `${(amount / 1000).toFixed(0)}k`;
+    }
+    return amount.toLocaleString();
+  };
+
+  const formatTableCurrency = (value: number) => `${value.toLocaleString()} XAF`;
 
   useEffect(() => {
     if (!budgetsResponse?.data) {
@@ -308,7 +333,9 @@ export const Budgeting = () => {
     let isMounted = true;
     const hydrateBudgets = async () => {
       setIsUtilizationLoading(true);
-      const budgets = budgetsResponse.data || [];
+      const budgets = (budgetsResponse.data || []).filter(
+        (budget) => (budget.status || '').toUpperCase() !== 'CLOSED'
+      );
 
       const utilizationResults = await Promise.all(
         budgets.map(async (budget) => {
@@ -336,11 +363,11 @@ export const Budgeting = () => {
         return {
           id: budget.budget_id,
           department: budget.department?.department_name || budget.department_name || 'Unknown',
-          allocated: formatCurrency(allocatedValue),
-          spent: formatCurrency(spentValue),
-          remaining: formatCurrency(remainingValue),
+          allocated: formatTableCurrency(allocatedValue),
+          spent: formatTableCurrency(spentValue),
+          remaining: formatTableCurrency(remainingValue),
           utilization: utilizationValue,
-          variance: `${varianceValue >= 0 ? '+' : '-'}${formatCurrency(Math.abs(varianceValue))}`,
+          variance: `${varianceValue >= 0 ? '+' : '-'}${formatTableCurrency(Math.abs(varianceValue))}`,
           varianceType: varianceValue >= 0 ? 'positive' : 'negative',
           allocatedValue,
           spentValue,
@@ -355,7 +382,7 @@ export const Budgeting = () => {
         .filter((budget) => budget.utilization >= 85)
         .map((budget) => {
           const severity: AlertSeverity =
-            budget.utilization >= 100
+            budget.utilization > 100
               ? 'exceeded'
               : budget.utilization >= 95
                 ? 'critical'
@@ -397,6 +424,10 @@ export const Budgeting = () => {
     navigate(`/dashboard/budgeting/${id}`);
   };
 
+  const handleEditBudget = (id: string) => {
+    navigate(`/dashboard/budgeting/add?editId=${id}`);
+  };
+
   const handleDeleteBudget = (id: string) => {
     setDeleteId(id);
     setDeleteModalOpen(true);
@@ -405,11 +436,13 @@ export const Budgeting = () => {
   const confirmDelete = async () => {
     if (!deleteId) return;
     try {
-      await updateBudget(deleteId, { status: 'CLOSED' });
-      toast.success('Budget closed successfully.');
+      await updateData(`/finance/budgets/${deleteId}`, { status: 'CLOSED' });
+      setDepartmentBudgets((prev) => prev.filter((budget) => budget.id !== deleteId));
+      setAlerts((prev) => prev.filter((alert) => alert.id !== deleteId));
+      toast.success('Budget deleted successfully.');
       await refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to close budget.');
+      toast.error(err.response?.data?.message || 'Failed to delete budget.');
     } finally {
       setDeleteModalOpen(false);
       setDeleteId(null);
@@ -482,7 +515,7 @@ export const Budgeting = () => {
         <Card
           heading="Total Allocated"
           amount={formatCurrency(budgetTotals.allocated)}
-          currency="Total"
+          currency="XAF"
           icons={<FaFileInvoice />}
           cardStyle={{ background: 'linear-gradient(135deg, #4f46a1 0%, #2f71b7 100%)' }}
           cardClassName="min-h-[120px]"
@@ -495,20 +528,20 @@ export const Budgeting = () => {
         <Card
           heading="Total Spent"
           amount={formatCurrency(budgetTotals.spent)}
-          currency="Spent"
-          icons={<FaMoneyBillWave className="text-white" />}
+          currency="XAF"
+          icons={<FaMoneyBillWave className="text-white text-xl" />}
         />
         <Card
           heading="Remaining Budget"
           amount={formatCurrency(budgetTotals.remaining)}
-          currency="Available"
-          icons={<FaChartLine className="text-white" />}
+          currency="XAF"
+          icons={<FaChartLine className="text-white text-xl" />}
         />
         <Card
           heading="Budget Variance"
           amount={`${budgetTotals.variance >= 0 ? '' : '-'}${formatCurrency(Math.abs(budgetTotals.variance))}`}
-          currency={budgetTotals.variance >= 0 ? 'Under Budget' : 'Over Budget'}
-          icons={<FaArrowTrendUp className="text-white" />}
+          currency="XAF"
+          icons={<FaArrowTrendUp className="text-white text-xl" />}
         />
       </div>
 
@@ -533,6 +566,7 @@ export const Budgeting = () => {
       <DepartmentBudgetTable
         budgets={departmentBudgets}
         onViewDetails={handleViewDetails}
+        onEdit={handleEditBudget}
         onDelete={handleDeleteBudget}
       />
 
@@ -558,9 +592,10 @@ export const Budgeting = () => {
             </button>
             <button
               onClick={confirmDelete}
+              disabled={isClosingBudget}
               className="inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
             >
-              Delete
+              {isClosingBudget ? 'Deleting...' : 'Delete'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

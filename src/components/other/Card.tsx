@@ -14,7 +14,12 @@ interface carProps {
   cardStyle?: React.CSSProperties,
   headingClassName?: string,
   amountClassName?: string,
-  currencyClassName?: string
+  currencyClassName?: string,
+  asButton?: boolean,
+  onClick?: React.MouseEventHandler<HTMLButtonElement | HTMLDivElement>,
+  type?: "button" | "submit" | "reset",
+  disabled?: boolean,
+  ariaPressed?: boolean
 }
 export const Card = ({
   heading,
@@ -31,7 +36,13 @@ export const Card = ({
   headingClassName,
   amountClassName,
   currencyClassName,
+  asButton = false,
+  onClick,
+  type = "button",
+  disabled = false,
+  ariaPressed,
 }: carProps) => {
+  const Component = asButton ? "button" : "div";
   const renderedIcon =
     icons && iconClassName && React.isValidElement(icons)
       ? React.cloneElement(icons as React.ReactElement, {
@@ -40,12 +51,20 @@ export const Card = ({
       : icons;
 
   return (
-    <div
-      className={`p-3 w-full h-31.75 rounded-[20px] flex flex-col gap-3 bg-white ${cardClassName || ""}`.trim()}
+    <Component
+      className={`p-3 w-full h-31.75 rounded-[20px] flex flex-col gap-3 bg-white ${asButton ? "text-left cursor-pointer" : ""} ${cardClassName || ""}`.trim()}
       style={{
         ...(cardBackgroundColor ? { backgroundColor: cardBackgroundColor } : {}),
         ...(cardStyle || {}),
       }}
+      onClick={onClick}
+      {...(asButton
+        ? {
+            type,
+            disabled,
+            "aria-pressed": ariaPressed,
+          }
+        : {})}
     >
       <div className="flex justify-between">
         <p
@@ -77,6 +96,6 @@ export const Card = ({
           {currency}
         </p>
       </div>
-    </div>
+    </Component>
   );
 }

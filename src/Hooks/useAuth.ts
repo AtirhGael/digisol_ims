@@ -1,5 +1,4 @@
-import { useUserStore } from "../Store/UserStore";
-import type { Permission } from "../Store/UserStore";
+import { useUserStore, Permission } from "../Store/UserStore";
 import { useNavigate } from "react-router-dom";
 
 export const useAuth = () => {
@@ -12,10 +11,11 @@ export const useAuth = () => {
     isInitialized,
     passwordMustChange,
     setUser,
-    setRoles,
-    setPermissions,
     setAccessToken,
     setPasswordMustChange,
+    setPermissions,
+    setRoles,
+    loginUser,
     clearUser,
     initializeAuth,
   } = useUserStore();
@@ -42,6 +42,7 @@ export const useAuth = () => {
     setPasswordMustChange(mustChangePassword);
     setPermissions(permissionsData);
     setRoles(rolesData.length ? rolesData : (userData?.roles ?? []));
+    localStorage.setItem("accessToken", token);
     localStorage.setItem("refreshToken", refreshToken);
 
     if (mustChangePassword) {

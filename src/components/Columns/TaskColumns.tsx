@@ -2,13 +2,13 @@ import React from "react";
 import { Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 interface TaskRow {
-  id: number;
+  id: string | number;
   title: string;
   assignee: string;
   projectName: string;
   progress: number;
   deadline: string;
-  priority: "Low" | "Medium" | "High";
+  priority: "Low" | "Medium" | "High" | "Critical";
 }
 
 const getPriorityColor = (priority: string): string => {
@@ -19,6 +19,8 @@ const getPriorityColor = (priority: string): string => {
       return "text-teal-500 bg-teal-50";
     case "low":
       return "text-gray-500 bg-gray-50";
+    case "critical":
+      return "text-purple-700 bg-purple-50";
     default:
       return "text-gray-500 bg-gray-50";
   }
@@ -33,9 +35,9 @@ function TaskActionMenu({
   onDelete,
   showEditDelete = true,
 }: {
-  rowId: number;
-  openMenuId: number | null;
-  onToggleMenu: (id: number | null) => void;
+  rowId: string | number;
+  openMenuId: string | number | null;
+  onToggleMenu: (id: string | number | null) => void;
   onView: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -100,8 +102,8 @@ export const createTaskColumns = ({
   onDeleteTask,
   showEditDelete = true,
 }: {
-  openMenuId: number | null;
-  onToggleMenu: (id: number | null) => void;
+  openMenuId: string | number | null;
+  onToggleMenu: (id: string | number | null) => void;
   onViewTask: (task: TaskRow) => void;
   onEditTask?: (task: TaskRow) => void;
   onDeleteTask?: (task: TaskRow) => void;
@@ -110,27 +112,27 @@ export const createTaskColumns = ({
   {
     key: "title",
     header: "Task Name",
-    render: (value: string) => <span className="block truncate max-w-[220px]">{value}</span>,
+    render: (value: string) => <span className="block truncate max-w-55">{value}</span>,
   },
   {
     key: "assignee",
     header: "Assignee",
-    render: (value: string) => <span className="block truncate max-w-[140px]">{value}</span>,
+    render: (value: string) => <span className="block truncate max-w-35">{value}</span>,
   },
   {
     key: "projectName",
     header: "Project Name",
-    render: (value: string) => <span className="block truncate max-w-[170px]">{value}</span>,
+    render: (value: string) => <span className="block truncate max-w-40">{value}</span>,
   },
   {
     key: "progress",
     header: "Progress",
-    render: (value: number) => <span className="block truncate max-w-[80px]">{value}%</span>,
+    render: (value: number) => <span className="block truncate max-w-20">{value}%</span>,
   },
   {
     key: "deadline",
     header: "Deadline",
-    render: (value: string) => <span className="block truncate max-w-[130px]">{value}</span>,
+    render: (value: string) => <span className="block truncate max-w-32.5">{value}</span>,
   },
   {
     key: "priority",
@@ -144,7 +146,7 @@ export const createTaskColumns = ({
   {
     key: "id",
     header: "Action",
-    render: (_value: number, row: TaskRow) => (
+    render: (_value: string | number, row: TaskRow) => (
       <TaskActionMenu
         rowId={row.id}
         openMenuId={openMenuId}

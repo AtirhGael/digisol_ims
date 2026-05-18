@@ -16,11 +16,12 @@ import {
 import { Loader2 } from 'lucide-react';
 import { type PayrollRecordApi } from '../financeApi';
 import useFetchHook from '../../../Hooks/UseFetchHook';
+import useDeleteHook from '../../../Hooks/UseDeleteHook';
 
 interface PayrollDetails {
   id: string;
   name: string;
-  status: 'Paid' | 'Pending' | 'Partially Paid';
+  status: 'PAID' | 'UNPAID';
   payslipNo: string;
   fullName: string;
   payPeriod: string;
@@ -49,7 +50,6 @@ export const ViewPayroll = () => {
   const [payrollRecord, setPayrollRecord] = useState<PayrollRecordApi | null>(null);
   // Delete dialog state.
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const {
@@ -62,6 +62,10 @@ export const ViewPayroll = () => {
     id ? `/payroll/${id}` : '',
     `payroll-record-${id}`,
     { enabled: Boolean(id) }
+  );
+  const { mutateAsync: deletePayroll, isLoading: isDeleting } = useDeleteHook(
+    '/payroll',
+    ['finance-payroll']
   );
 
   useEffect(() => {
@@ -103,7 +107,7 @@ export const ViewPayroll = () => {
     return {
       id: payrollRecord.record_id,
       name: payrollRecord.employee_name || 'Unknown',
-      status: payrollRecord.status === 'PENDING' ? 'Pending' : payrollRecord.status === 'PAID' ? 'Paid' : 'Partially Paid',
+      status: payrollRecord.status === 'PAID' ? 'PAID' : 'UNPAID',
       payslipNo: payrollRecord.payroll_id || 'N/A',
       fullName: payrollRecord.employee_name || 'N/A',
       payPeriod: payrollRecord.payroll_period || 'N/A',
@@ -128,11 +132,9 @@ export const ViewPayroll = () => {
   // Status pill colors.
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Paid':
+      case 'PAID':
         return 'bg-green-100 text-green-600';
-      case 'Pending':
-        return 'bg-yellow-100 text-yellow-600';
-      case 'Partially Paid':
+      case 'UNPAID':
         return 'bg-red-100 text-red-600';
       default:
         return 'bg-gray-100 text-gray-600';
@@ -157,14 +159,19 @@ export const ViewPayroll = () => {
   };
 
   // Confirm delete from the modal.
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!id || isDeleting) return;
-    setIsDeleting(true);
     setDeleteError(null);
-    const message = 'Delete is not available for payroll records yet.';
-    setDeleteError(message);
-    toast.error(message);
-    setIsDeleting(false);
+    try {
+      await deletePayroll(id);
+      toast.success('Payroll deleted successfully.');
+      setDeleteModalOpen(false);
+      navigate('/dashboard/payroll');
+    } catch (deleteErr: any) {
+      const message = deleteErr?.response?.data?.message || 'Failed to delete payroll record.';
+      setDeleteError(message);
+      toast.error(message);
+    }
   };
 
   // Close delete modal without deleting.

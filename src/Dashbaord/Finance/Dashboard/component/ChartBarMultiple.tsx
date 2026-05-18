@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
 
 // Recharts series config for colors/labels.
@@ -74,8 +74,28 @@ export function ChartBarMultiple({
               tickMargin={8}
               tickFormatter={yTickFormatter}
             />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name) => (
+                    <div className="flex min-w-32 items-center justify-between gap-3">
+                      <span>{config[String(name)]?.label || String(name)}</span>
+                      <span className="font-mono font-medium">
+                        {typeof value === "number" ? yTickFormatter(value) : value}
+                      </span>
+                    </div>
+                  )}
+                />
+              }
+            />
             {seriesKeys.map((key) => (
-              <Bar key={key} dataKey={key} fill={`var(--color-${key})`} radius={2} />
+              <Bar
+                key={key}
+                dataKey={key}
+                name={String(config[key]?.label || key)}
+                fill={`var(--color-${key})`}
+                radius={2}
+              />
             ))}
           </BarChart>
         </ChartContainer>
