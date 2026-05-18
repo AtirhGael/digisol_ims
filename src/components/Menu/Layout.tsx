@@ -66,7 +66,7 @@ export const Layout = () => {
         <div className="max-w-70 overflow-y-auto h-screen bg-white shadow-xl sidebar no-scrollbar z-30 sticky top-2 rounded-xl p-2">
           {/* logo */}
           <img
-            src="/src/Assets/digisolLogo 1.png"
+            src="/digisolLogo.png"
             alt="logo"
             className="object-fit"
           />
@@ -89,7 +89,7 @@ export const Layout = () => {
         <div className="min-w-60 max-h-screen sidebar overflow-scroll no-scrollbar bg-background z-20 sticky top-2 rounded-xl p-2">
           {/* logo */}
           <img
-            src="/src/Assets/digisolLogo 1.png"
+            src="/digisolLogo.png"
             alt="logo"
             className="object-fit"
           />

@@ -79,7 +79,7 @@ export const Login = () => {
     <div className="w-full min-h-screen">
       {/* header */}
       <div className="w-full border-b-2 border-gray-200 p-3">
-        <img src="/src/Assets/digisolLogo 1.png" alt="logo" />
+        <img src="/digisolLogo.png" alt="logo" />
       </div>
       {/* login secton */}
       <div className="w-full min-h-[95vh] flex items-center justify-center">
