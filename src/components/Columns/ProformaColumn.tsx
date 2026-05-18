@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MoreVertical, Eye, Pencil, Trash2 } from "lucide-react";
-import { Button } from "../ui/Button";
+import { Button } from "../ui/button";
 
 type ProformaStatus = "DRAFT" | "SENT" | "APPROVED" | "REJECTED";
 
